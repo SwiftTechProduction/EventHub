@@ -1,6 +1,30 @@
 {
+  "name": "eventhub",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Root scripts for EventHub client and server",
+  "scripts": {
+    "install:all": "npm install --prefix server --legacy-peer-deps && npm install --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "dev": "npm run dev:client",
+    "start:server": "npm run start --prefix server",
+    "start:client": "npm run preview --prefix client",
+    "start": "concurrently -n server,client -c blue,green \"npm run start:server\" \"npm run start:client\"",
+    "build": "npm run build --prefix server && npm run build --prefix client",
+    "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client",
+    "test": "npm run test --prefix server",
+    "lint": "npm run typecheck",
+    "seed": "npm run seed --prefix server",
+    "setup": "npm run install:all",
+    "dev:all": "npm run install:all && npm run dev",
+    "start:all": "npm run install:all && npm run start"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "concurrently": "^9.0.1"
+  },
   "dependencies": {
-    "react-icons": "^5.7.0",
-    "react-router-dom": "^7.18.4"
+    "cors": "^2.8.6"
   }
 }
