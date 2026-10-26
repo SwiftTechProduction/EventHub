@@ -1,35 +1,43 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import Home from './pages/Home';
-
-import Login from './pages/Login';
-import Register from './pages/Register';
-import UserDashboard from './pages/UserDashboard';
-import AdminDashboard from './pages/AdminDashboard';
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import Home from "./pages/Home";
+import EventDetail from './pages/EventDetail';
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import UserDashboard from "./pages/UserDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 /** Mengatur routing utama untuk halaman publik, akun, dashboard, dan pembayaran. */
 function App() {
-    return (
-        <Router>
-            <div className="min-h-screen flex flex-col">
-                <Navbar />
-                <main className="flex-grow px-4 py-7 sm:px-6 lg:px-8">
-                    <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/login" element={<Login />} />
-                        <Route path="/register" element={<Register />} />
-                        <Route path="/dashboard" element={<UserDashboard />} />
-                        <Route path="/admin" element={<AdminDashboard />} />
-                        <Route path="*" element={<h1 className="text-3xl font-bold text-center mt-20">404 - Page Not Found</h1>} />
-                    </Routes>
-                </main>
-                <footer className="site-footer px-4 py-7 text-center text-sm text-slate-500">
-                    EventHub · Temukan pengalaman berikutnya, bersama komunitasmu.
-                </footer>
-            </div>
-        </Router>
-    );
+  return (
+    <Router>
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-grow px-4 py-7 sm:px-6 lg:px-8">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/events/:id" element={<EventDetail />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/dashboard" element={<UserDashboard />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route
+              path="*"
+              element={
+                <h1 className="text-3xl font-bold text-center mt-20">
+                  404 - Page Not Found
+                </h1>
+              }
+            />
+          </Routes>
+        </main>
+        <footer className="site-footer px-4 py-7 text-center text-sm text-slate-500">
+          EventHub · Temukan pengalaman berikutnya, bersama komunitasmu.
+        </footer>
+      </div>
+    </Router>
+  );
 }
 
 export default App;
