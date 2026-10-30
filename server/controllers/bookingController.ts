@@ -321,10 +321,10 @@ export const getMyBookings = async (req, res) => {
         await expireStaleBookings();
         let filter = 'WHERE b.user_id = $1';
         const values: unknown[] = [req.user.id];
-        if (['admin', 'it'].includes(req.user.role)) {
+        if (req.user.role === 'it') {
             filter = '';
             values.length = 0;
-        } else if (req.user.role === 'organizer') {
+        } else if (['admin', 'organizer'].includes(req.user.role)) {
             filter = 'WHERE e.created_by = $1';
         }
         const bookings = await pool.query(

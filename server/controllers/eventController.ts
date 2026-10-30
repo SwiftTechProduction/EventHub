@@ -99,7 +99,7 @@ export const getEventById = async (req, res) => {
 /** Mengambil seluruh event milik organizer agar event lampau tetap dapat dikelola. */
 export const getManagedEvents = async (req, res) => {
     try {
-        const events = ['admin', 'it'].includes(req.user.role)
+        const events = req.user.role === 'it'
             ? await pool.query(`${eventQuery} WHERE e.is_deleted = FALSE ORDER BY e.date DESC`)
             : await pool.query(`${eventQuery} WHERE e.created_by = $1 AND e.is_deleted = FALSE ORDER BY e.date DESC`, [req.user.id]);
         res.json(events.rows);
@@ -295,7 +295,7 @@ export const getOrganizerStats = async (req, res) => {
                AND ($4 = TRUE OR e.created_by = $5)
              GROUP BY date_trunc($1, b.created_at)::date
              ORDER BY date ASC`,
-            [period, year, Number(req.query.month || 0), ['admin', 'it'].includes(req.user.role), req.user.id]
+            [period, year, Number(req.query.month || 0), req.user.role === 'it', req.user.id]
         );
         res.json(rows.rows);
     } catch (error) {
