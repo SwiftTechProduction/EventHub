@@ -5,7 +5,7 @@
     "main": "dist/server.js",
     "type": "commonjs",
     "scripts": {
-        "build": "tsc -p tsconfig.json",
+        "build": "npx tsc -p tsconfig.json",
         "typecheck": "tsc -p tsconfig.json --noEmit",
         "test": "tsx --test tests/bookingRules.test.ts tests/featureRules.test.ts",
         "start": "node dist/server.js",
