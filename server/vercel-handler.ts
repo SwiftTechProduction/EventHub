@@ -5,7 +5,7 @@ import { initializeDatabase } from './db';
 import { expireStaleBookings } from './utils/bookingLifecycle';
 
 const allowedOrigins = new Set([
-    'https://eventvite.vercel.app',
+    'https://eventhub-purwadhika.vercel.app',
     'http://localhost:5173',
     'http://localhost:3000',
     ...(process.env.CLIENT_ORIGIN || '')
