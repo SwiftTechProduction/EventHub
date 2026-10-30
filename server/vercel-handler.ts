@@ -1,8 +1,7 @@
 import 'dotenv/config';
 import type { Request, Response } from 'express';
 import app from './app';
-import { initializeDatabase } from './db';
-import { expireStaleBookings } from './utils/bookingLifecycle';
+import { pool } from './db';
 
 const allowedOrigins = new Set([
     'https://eventhub-purwadhika.vercel.app',
@@ -43,10 +42,8 @@ const initialize = (): Promise<void> => {
     }
 
     if (!initialization) {
-        initialization = initializeDatabase()
-            .then(async () => {
-                await expireStaleBookings();
-            })
+        initialization = pool.query('SELECT 1')
+            .then(() => undefined)
             .catch((error: unknown) => {
                 initialization = undefined;
                 throw error;
