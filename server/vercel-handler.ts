@@ -16,9 +16,30 @@ const allowedOrigins = new Set([
 
 let initialization: Promise<void> | undefined;
 
+const getErrorCode = (error: unknown): string | undefined => {
+    if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        typeof error.code === 'string' &&
+        /^[A-Z0-9_]{1,32}$/.test(error.code)
+    ) {
+        return error.code;
+    }
+
+    return undefined;
+};
+
 const initialize = (): Promise<void> => {
-    if (!process.env.JWT_SECRET) {
-        throw new Error('JWT_SECRET must be configured before starting the server');
+    const missingVariables: string[] = [];
+    if (!process.env.JWT_SECRET?.trim()) {
+        missingVariables.push('JWT_SECRET');
+    }
+    if (!process.env.DATABASE_URL?.trim() && !process.env.PGHOST?.trim()) {
+        missingVariables.push('DATABASE_URL');
+    }
+    if (missingVariables.length > 0) {
+        throw new Error(`Missing required environment variables: ${missingVariables.join(', ')}`);
     }
 
     if (!initialization) {
@@ -60,11 +81,16 @@ export default async (req: Request, res: Response): Promise<void> => {
     try {
         await initialize();
     } catch (error) {
-        console.error('Serverless API initialization failed:', error);
+        const errorCode = getErrorCode(error);
+        const detail = error instanceof Error ? error.message : 'Unknown startup error';
+        console.error('Serverless API initialization failed:', { errorCode });
         res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.end(JSON.stringify({
-            message: 'Server initialization failed. Check DATABASE_URL and JWT_SECRET in the backend Vercel project settings.',
+            message: detail.startsWith('Missing required environment variables:')
+                ? `${detail}. Set them in the Vercel project that deploys the frontend and API, then redeploy.`
+                : `Server initialization failed${errorCode ? ` (error code: ${errorCode})` : ''}. Check DATABASE_URL, database access, and JWT_SECRET in the Vercel project that deploys the frontend and API.`,
+            ...(errorCode ? { errorCode } : {}),
         }));
         return;
     }
