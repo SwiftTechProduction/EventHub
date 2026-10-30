@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaChartLine, FaTicketAlt } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,11 @@ const emptyForm: EventForm = {
     title: '', description: '', date: '', endDate: '', location: '',
     category: '', totalSeats: '', ticketPrice: '', image: '', ticketTypes: ''
 };
+
+const eventCategories = ['Musik', 'Teknologi', 'Bisnis', 'Seni', 'Olahraga', 'Kuliner', 'Pendidikan'];
+const managedEventsPageSize = 10;
+
+type EventStatusFilter = 'active' | 'expired' | 'inactive' | 'all';
 
 interface Attendee {
     _id: number | string;
@@ -44,6 +49,8 @@ const AdminDashboard = () => {
     const [period, setPeriod] = useState<'year' | 'month' | 'day'>('month');
     const [showEventForm, setShowEventForm] = useState(false);
     const [editingEventId, setEditingEventId] = useState<number | string | null>(null);
+    const [eventStatusFilter, setEventStatusFilter] = useState<EventStatusFilter>('active');
+    const [eventPage, setEventPage] = useState(1);
     const [formData, setFormData] = useState<EventForm>(emptyForm);
     const [attendees, setAttendees] = useState<Attendee[]>([]);
     const [attendeeEvent, setAttendeeEvent] = useState<string | null>(null);
@@ -58,6 +65,8 @@ const AdminDashboard = () => {
     const [newPassword, setNewPassword] = useState('');
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+    const eventFormRef = useRef<HTMLElement>(null);
+    const eventFormHeadingRef = useRef<HTMLHeadingElement>(null);
 
     useEffect(() => {
         if (!user || !['it', 'admin', 'organizer'].includes(user.role)) {
@@ -66,6 +75,16 @@ const AdminDashboard = () => {
         }
         void loadDashboard();
     }, [user, navigate, period]);
+
+    useEffect(() => {
+        if (!showEventForm) return;
+
+        const frame = window.requestAnimationFrame(() => {
+            eventFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            eventFormHeadingRef.current?.focus({ preventScroll: true });
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [showEventForm, editingEventId]);
 
     /** Memuat event, transaksi, dan statistik sesuai peran organizer. */
     const loadDashboard = async () => {
@@ -179,7 +198,6 @@ const AdminDashboard = () => {
             ticketTypes: (event.ticketTypes || []).map((ticket) => `${ticket.name}|${ticket.price}|${ticket.capacity}`).join('\n')
         });
         setShowEventForm(true);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     /** Menghapus event setelah dialog memastikan tindakan ini memang disengaja. */
@@ -277,6 +295,30 @@ const AdminDashboard = () => {
     const maxRevenue = useMemo(() => Math.max(...stats.map((item) => Number(item.revenue)), 1), [stats]);
     const revenue = bookings.filter((booking) => booking.status === 'done').reduce((sum, booking) => sum + booking.amount, 0);
     const pending = bookings.filter((booking) => booking.status === 'waiting_for_admin_confirmation').length;
+    const categorySuggestions = useMemo(
+        () => [...new Set([...eventCategories, ...events.map((event) => event.category.trim()).filter(Boolean)])],
+        [events]
+    );
+    const filteredEvents = useMemo(() => {
+        const now = Date.now();
+        return events.filter((event) => {
+            const status: EventStatusFilter = event.isDeleted
+                ? 'inactive'
+                : new Date(event.endDate || event.date).getTime() < now
+                    ? 'expired'
+                    : 'active';
+            return eventStatusFilter === 'all' || status === eventStatusFilter;
+        });
+    }, [events, eventStatusFilter]);
+    const eventPageCount = Math.max(1, Math.ceil(filteredEvents.length / managedEventsPageSize));
+    const paginatedEvents = filteredEvents.slice(
+        (eventPage - 1) * managedEventsPageSize,
+        eventPage * managedEventsPageSize
+    );
+
+    useEffect(() => {
+        if (eventPage > eventPageCount) setEventPage(eventPageCount);
+    }, [eventPage, eventPageCount]);
 
     if (loading) return <div className="page-message">Memuat panel organizer…</div>;
 
@@ -287,7 +329,7 @@ const AdminDashboard = () => {
                 <div>
                     <span className="eyebrow text-white/65">{user?.role === 'it' ? 'ADMINISTRATOR IT' : user?.role === 'admin' ? 'ADMINISTRATOR' : 'EVENT ORGANIZER'}</span>
                     <h1 className="mt-2 text-3xl font-extrabold text-white md:text-4xl">{user?.role === 'it' ? 'Dashboard IT' : 'Dashboard Organizer'}</h1>
-                    <p className="mt-2 text-sm text-white/70">{user?.role === 'it' ? 'Akses global: kelola customer, organizer, event, dan transaksi.' : 'Kelola acara, periksa pembayaran, dan lihat perkembangan penjualan.'}</p>
+                    <p className="mt-2 text-sm text-white/70">{user?.role === 'it' ? 'Akses All Transactions - Manage User Login, Event, dan Transaksi.' : 'Kelola acara, periksa pembayaran, dan lihat perkembangan penjualan.'}</p>
                 </div>
                 <button onClick={() => { setEditingEventId(null); setFormData(emptyForm); setShowEventForm(!showEventForm); }} className="button-light">
                     {showEventForm ? 'Tutup formulir' : '+ Buat event'}
@@ -307,8 +349,8 @@ const AdminDashboard = () => {
                 <section className="surface-card mt-7 p-5 md:p-7">
                     <div>
                         <span className="eyebrow">AKSES KHUSUS IT</span>
-                        <h2 className="mt-1 text-xl font-extrabold text-slate-900">Customer & organizer</h2>
-                        <p className="mt-1 text-sm text-slate-500">Kelola akun dan role. Penghapusan menonaktifkan akun tanpa menghapus transaksinya.</p>
+                        <h2 className="mt-1 text-xl font-extrabold text-slate-900">Customer & Organizer</h2>
+                        <p className="mt-1 text-sm text-slate-500">Kelola akun dan role serta Menonaktifkan akun tanpa menghapus user login.</p>
                     </div>
                     <form onSubmit={createAccount} className="mt-5 grid gap-3 md:grid-cols-5">
                         <Field label="Nama" value={newUser.name} onChange={(value) => setNewUser({ ...newUser, name: value })} required />
@@ -355,12 +397,17 @@ const AdminDashboard = () => {
             </section>
 
             {showEventForm && (
-                <section className="surface-card mt-7 p-5 md:p-7">
-                    <h2 className="text-xl font-extrabold text-slate-900">{editingEventId ? 'Perbarui event' : 'Rancang event baru'}</h2>
+                <section ref={eventFormRef} className="surface-card mt-7 scroll-mt-24 p-5 md:p-7">
+                    <h2 ref={eventFormHeadingRef} tabIndex={-1} className="text-xl font-extrabold text-slate-900">{editingEventId ? 'Perbarui event' : 'Rancang event baru'}</h2>
                     <p className="mt-1 text-sm text-slate-500">Isi informasi utama, harga Rupiah, dan kapasitas tiket.</p>
                     <form onSubmit={saveEvent} className="mt-5 grid gap-4 md:grid-cols-2">
                         <Field label="Nama event" value={formData.title} onChange={(value) => setFormData({ ...formData, title: value })} required />
-                        <Field label="Kategori" value={formData.category} onChange={(value) => setFormData({ ...formData, category: value })} required />
+                        <label className="field-label">Kategori
+                            <input className="field-control mt-2" list="event-category-suggestions" required value={formData.category} onChange={(event) => setFormData({ ...formData, category: event.target.value })} />
+                            <datalist id="event-category-suggestions">
+                                {categorySuggestions.map((category) => <option key={category} value={category} />)}
+                            </datalist>
+                        </label>
                         <label className="field-label">Mulai<input className="field-control mt-2" type="datetime-local" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} /></label>
                         <label className="field-label">Selesai<input className="field-control mt-2" type="datetime-local" required value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} /></label>
                         <Field label="Lokasi" value={formData.location} onChange={(value) => setFormData({ ...formData, location: value })} required />
@@ -413,9 +460,28 @@ const AdminDashboard = () => {
                 {/* Daftar event menyediakan aksi pengelolaan, voucher, dan peserta. */}
                 <section>
                     <SectionTitle icon={<FaTicketAlt />} title="Event yang dikelola" count={events.length} />
+                    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                        <label className="field-label">Tampilkan event
+                            <select
+                                className="field-control mt-2 min-w-48"
+                                value={eventStatusFilter}
+                                onChange={(event) => {
+                                    setEventStatusFilter(event.target.value as EventStatusFilter);
+                                    setEventPage(1);
+                                }}
+                            >
+                                <option value="active">Aktif</option>
+                                <option value="expired">Kedaluwarsa</option>
+                                <option value="inactive">Nonaktif</option>
+                                <option value="all">Semua</option>
+                            </select>
+                        </label>
+                        <span className="text-sm text-slate-500">{filteredEvents.length} event</span>
+                    </div>
                     <div className="space-y-3">
                         {!events.length ? <div className="surface-card p-7 text-center text-sm text-slate-500">Belum ada event. Buat event pertama melalui tombol di atas.</div> :
-                            events.map((event) => (
+                            !filteredEvents.length ? <div className="surface-card p-7 text-center text-sm text-slate-500">Tidak ada event untuk filter ini.</div> :
+                            paginatedEvents.map((event) => (
                                 <article key={event._id} className="surface-card overflow-hidden">
                                     <div className="flex flex-col gap-4 p-4 sm:flex-row">
                                         {event.image && <img src={event.image} alt="" className="h-28 w-full rounded-xl object-cover sm:w-36" />}
@@ -454,6 +520,21 @@ const AdminDashboard = () => {
                             ))
                         }
                     </div>
+                    {eventPageCount > 1 && (
+                        <nav className="mt-5 flex flex-wrap items-center justify-center gap-2" aria-label="Halaman daftar event">
+                            {Array.from({ length: eventPageCount }, (_, index) => index + 1).map((page) => (
+                                <button
+                                    key={page}
+                                    type="button"
+                                    aria-current={page === eventPage ? 'page' : undefined}
+                                    onClick={() => setEventPage(page)}
+                                    className={page === eventPage ? 'button-primary min-h-9 min-w-9 px-3 py-2 text-sm' : 'button-secondary min-h-9 min-w-9 px-3 py-2 text-sm'}
+                                >
+                                    {page}
+                                </button>
+                            ))}
+                        </nav>
+                    )}
                 </section>
 
                 {/* Panel transaksi menampilkan bukti bayar dan hanya menyediakan aksi yang sesuai status. */}
