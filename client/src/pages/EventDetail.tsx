@@ -67,6 +67,8 @@ const EventDetail = () => {
     );
     const unitPrice = ticket?.price ?? event?.ticketPrice ?? 0;
     const subtotal = unitPrice * quantity;
+    const canApplyDiscounts = Number(event?.ticketPrice) > 0 && unitPrice > 0;
+    const appliedPoints = canApplyDiscounts ? pointsToUse : 0;
 
     /** Meminta OTP atau mengirim order beserta pilihan tiket dan diskonnya. */
     const handleCheckout = async () => {
@@ -89,9 +91,9 @@ const EventDetail = () => {
                     otp,
                     quantity,
                     ticketType: selectedTicket,
-                    couponCode: couponCode.trim() || undefined,
-                    voucherCode: voucherCode.trim() || undefined,
-                    pointsToUse
+                    couponCode: canApplyDiscounts ? couponCode.trim() || undefined : undefined,
+                    voucherCode: canApplyDiscounts ? voucherCode.trim() || undefined : undefined,
+                    pointsToUse: appliedPoints
                 });
                 setNotice(data.emailSent
                     ? `${data.message} Konfirmasi pesanan juga sudah dikirim ke email akun Anda.`
@@ -216,38 +218,51 @@ const EventDetail = () => {
                     ) : null}
                     {event.ticketTypes?.length ? (
                         <select id="ticket-type" value={selectedTicket} onChange={(e) => setSelectedTicket(e.target.value)} className="field-control">
-                            {event.ticketTypes.map((item) => <option key={item.name} value={item.name}>{item.name} — {formatRupiah(item.price)}</option>)}
+                            {event.ticketTypes.map((item) => <option key={item.name} value={item.name}>{item.name} — {item.price === 0 ? 'FREE · GRATIS' : formatRupiah(item.price)}</option>)}
                         </select>
                     ) : (
                         <p className="mt-5 text-sm text-slate-500">Tiket umum · {event.availableSeats} kursi tersisa</p>
+                    )}
+                    {unitPrice === 0 && (
+                        <span className="mt-4 inline-flex rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-extrabold tracking-wide text-emerald-800">
+                            FREE · GRATIS
+                        </span>
                     )}
                     <label className="field-label mt-5" htmlFor="ticket-quantity">Jumlah tiket</label>
                     <input id="ticket-quantity" type="number" min={1} max={Math.min(10, event.availableSeats)} value={quantity}
                         onChange={(e) => setQuantity(Math.max(1, Math.min(Number(e.target.value), 10, event.availableSeats)))}
                         className="field-control" />
 
-                    <div className="mt-5 grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="field-label" htmlFor="coupon-code">Kupon referral</label>
-                            <input id="coupon-code" className="field-control uppercase" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="WELCOME…" />
-                        </div>
-                        <div>
-                            <label className="field-label" htmlFor="voucher-code">Voucher event</label>
-                            <input id="voucher-code" className="field-control uppercase" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value.toUpperCase())} placeholder="KODE VOUCHER" />
-                        </div>
-                    </div>
-                    {user && (
-                        <div className="mt-4">
-                            <label className="field-label" htmlFor="points-use">Poin (saldo {pointsBalance.toLocaleString('id-ID')})</label>
-                            <input id="points-use" type="number" min={0} max={Math.min(pointsBalance, subtotal)} value={pointsToUse}
-                                onChange={(e) => setPointsToUse(Math.max(0, Math.min(Number(e.target.value), pointsBalance, subtotal)))}
-                                className="field-control" />
-                        </div>
+                    {canApplyDiscounts ? (
+                        <>
+                            <div className="mt-5 grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="field-label" htmlFor="coupon-code">Kupon referral</label>
+                                    <input id="coupon-code" className="field-control uppercase" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="WELCOME…" />
+                                </div>
+                                <div>
+                                    <label className="field-label" htmlFor="voucher-code">Voucher event</label>
+                                    <input id="voucher-code" className="field-control uppercase" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value.toUpperCase())} placeholder="KODE VOUCHER" />
+                                </div>
+                            </div>
+                            {user && (
+                                <div className="mt-4">
+                                    <label className="field-label" htmlFor="points-use">Poin (saldo {pointsBalance.toLocaleString('id-ID')})</label>
+                                    <input id="points-use" type="number" min={0} max={Math.min(pointsBalance, subtotal)} value={pointsToUse}
+                                        onChange={(e) => setPointsToUse(Math.max(0, Math.min(Number(e.target.value), pointsBalance, subtotal)))}
+                                        className="field-control" />
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <p className="mt-5 rounded-xl bg-emerald-50 p-3 text-sm font-medium text-emerald-800">
+                            Tiket gratis tidak dapat menggunakan diskon atau poin.
+                        </p>
                     )}
                     <div className="mt-6 space-y-2 border-t border-slate-100 pt-5 text-sm">
                         <div className="flex justify-between text-slate-500"><span>Subtotal ({quantity} tiket)</span><span>{formatRupiah(subtotal)}</span></div>
-                        {pointsToUse > 0 && <div className="flex justify-between text-emerald-700"><span>Poin digunakan</span><span>−{formatRupiah(pointsToUse)}</span></div>}
-                        <div className="flex justify-between pt-2 text-lg font-extrabold text-slate-900"><span>Total</span><span>{formatRupiah(Math.max(0, subtotal - pointsToUse))}</span></div>
+                        {appliedPoints > 0 && <div className="flex justify-between text-emerald-700"><span>Poin digunakan</span><span>−{formatRupiah(appliedPoints)}</span></div>}
+                        <div className="flex justify-between pt-2 text-lg font-extrabold text-slate-900"><span>Total</span><span>{formatRupiah(Math.max(0, subtotal - appliedPoints))}</span></div>
                     </div>
                     {showOTP && (
                         <div className="mt-5">

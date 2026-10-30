@@ -1,6 +1,6 @@
 import { randomInt } from 'crypto';
 import { pool, withTransaction } from '../db';
-import { calculateDiscount, planPointAllocations } from '../utils/bookingRules';
+import { calculateDiscount, canApplyDiscountToTicket, planPointAllocations } from '../utils/bookingRules';
 import { expireStaleBookings } from '../utils/bookingLifecycle';
 import { sendBookingCreatedEmail, sendOTPEmail, sendTransactionEmail } from '../utils/email';
 
@@ -112,6 +112,15 @@ export const bookEvent = async (req, res) => {
             }
 
             const subtotal = unitPrice * quantity;
+            const hasDiscountInput = Boolean(
+                String(req.body.couponCode || '').trim() ||
+                String(req.body.voucherCode || '').trim() ||
+                pointsToUse > 0
+            );
+            if (hasDiscountInput && !canApplyDiscountToTicket(Number(event.ticket_price), unitPrice)) {
+                return { error: 'Tiket gratis tidak dapat menggunakan diskon atau poin.', status: 400 };
+            }
+
             let discountAmount = 0;
             let couponId: number | null = null;
             let voucherId: number | null = null;

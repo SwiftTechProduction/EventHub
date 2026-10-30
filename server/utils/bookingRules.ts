@@ -23,6 +23,11 @@ export const calculateDiscount = (
     return Math.min(Math.round(discount * 100) / 100, subtotal);
 };
 
+/** Diskon hanya dapat digunakan pada tiket berbayar dalam event berbayar. */
+export const canApplyDiscountToTicket = (eventPrice: number, ticketPrice: number): boolean =>
+    Number.isFinite(eventPrice) && eventPrice > 0 &&
+    Number.isFinite(ticketPrice) && ticketPrice > 0;
+
 /** Memecah pemakaian poin dari kredit terdekat expired agar refund tepat. */
 export const planPointAllocations = (
     credits: Array<{ id: number | string; remaining: number }>,

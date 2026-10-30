@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     calculateDiscount,
+    canApplyDiscountToTicket,
     getExpiredBookingStatus,
     planPointAllocations
 } from '../utils/bookingRules';
@@ -11,6 +12,10 @@ test('diskon persentase dan nominal tidak mengurangi harga di bawah nol', () => 
     assert.equal(calculateDiscount(300_000, 'percent', 10), 30_000);
     assert.equal(calculateDiscount(300_000, 'fixed', 400_000), 300_000);
     assert.equal(calculateDiscount(300_000, 'percent', 150), 300_000);
+    assert.equal(calculateDiscount(0, 'fixed', 100_000), 0);
+    assert.equal(canApplyDiscountToTicket(0, 0), false);
+    assert.equal(canApplyDiscountToTicket(100_000, 0), false);
+    assert.equal(canApplyDiscountToTicket(100_000, 100_000), true);
 });
 
 /** Memastikan transaksi hanya expired setelah melewati tenggat yang sesuai. */

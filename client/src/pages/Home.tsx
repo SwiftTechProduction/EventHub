@@ -164,8 +164,8 @@ const Home = () => {
                                     {event.image ? <img src={event.image} alt={event.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /> :
                                         <div className="grid h-full place-items-center text-5xl font-black text-violet-300">{event.category.slice(0, 1)}</div>}
                                     <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-violet-800 backdrop-blur">{event.category}</span>
-                                    <span className="absolute bottom-4 right-4 rounded-xl bg-[#201a35]/90 px-3 py-2 text-sm font-extrabold text-white backdrop-blur">
-                                        {event.ticketPrice === 0 ? 'GRATIS' : formatRupiah(event.ticketPrice)}
+                                    <span className={`absolute bottom-4 right-4 rounded-xl px-3 py-2 text-sm font-extrabold backdrop-blur ${event.ticketPrice === 0 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/20' : 'bg-[#201a35]/90 text-white'}`}>
+                                        {event.ticketPrice === 0 ? 'FREE · GRATIS' : formatRupiah(event.ticketPrice)}
                                     </span>
                                 </div>
                                 <div className="p-5">

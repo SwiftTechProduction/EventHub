@@ -489,13 +489,13 @@ const AdminDashboard = () => {
                                             <h3 className="font-bold text-slate-900">{event.title}</h3>
                                             {event.isDeleted && <span className="mt-1 inline-block rounded-full bg-rose-100 px-2 py-1 text-xs font-bold text-rose-800">Soft-delete</span>}
                                             <p className="mt-1 text-xs text-slate-500">{new Date(event.date).toLocaleString('id-ID')} · {event.location}</p>
-                                            <p className="mt-2 text-sm font-semibold text-violet-700">{event.availableSeats}/{event.totalSeats} tiket tersisa · {formatRupiah(event.ticketPrice)}</p>
+                                            <p className="mt-2 text-sm font-semibold text-violet-700">{event.availableSeats}/{event.totalSeats} tiket tersisa · {event.ticketPrice === 0 ? 'FREE · GRATIS' : formatRupiah(event.ticketPrice)}</p>
                                             <div className="mt-3 flex flex-wrap gap-2">
                                                 {event.isDeleted && user?.role === 'it'
                                                     ? <button className="button-small" onClick={() => void restoreEvent(event)}>Pulihkan event</button>
                                                     : !event.isDeleted && <>
                                                         <button className="button-small" onClick={() => editEvent(event)}>Edit</button>
-                                                        <button className="button-small" onClick={() => setVoucherEvent(String(event._id))}>Buat voucher</button>
+                                                        {event.ticketPrice > 0 && <button className="button-small" onClick={() => setVoucherEvent(String(event._id))}>Buat voucher</button>}
                                                         <button className="button-small" onClick={() => void showAttendees(event._id)}>{attendeeEvent === String(event._id) ? 'Tutup peserta' : 'Daftar peserta'}</button>
                                                         <button className="button-small button-danger" onClick={() => void deleteEvent(event)}>Hapus</button>
                                                     </>}
@@ -687,7 +687,7 @@ const statusLabel = (status: Booking['status']): string => ({
     waiting_for_admin_confirmation: 'Menunggu konfirmasi organizer',
     done: 'Selesai',
     rejected: 'Ditolak',
-    expired: 'Expired',
+    expired: 'EXPIRED',
     canceled: 'Dibatalkan'
 }[status]);
 

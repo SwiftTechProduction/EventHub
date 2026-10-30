@@ -238,6 +238,14 @@ export const createVoucher = async (req, res) => {
         if (!await canManageEvent(req.params.id, req.user)) {
             return res.status(404).json({ message: 'Event tidak ditemukan atau bukan milik Anda.' });
         }
+        const event = await pool.query(
+            'SELECT ticket_price FROM events WHERE id = $1 AND is_deleted = FALSE',
+            [req.params.id]
+        );
+        if (!event.rowCount) return res.status(404).json({ message: 'Event tidak ditemukan atau bukan milik Anda.' });
+        if (Number(event.rows[0].ticket_price) <= 0) {
+            return res.status(400).json({ message: 'Voucher tidak tersedia untuk event gratis.' });
+        }
         if (!code?.trim() || !['percent', 'fixed'].includes(discountType) ||
             !Number.isFinite(discount) || discount <= 0 || !startsAt || !endsAt ||
             new Date(endsAt) <= new Date(startsAt) || !Number.isInteger(uses) || uses < 1 ||

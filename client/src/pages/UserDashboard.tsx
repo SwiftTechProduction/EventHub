@@ -311,7 +311,7 @@ const statusLabel = (status: Booking['status']): string => ({
     waiting_for_admin_confirmation: 'Menunggu konfirmasi organizer',
     done: 'Selesai',
     rejected: 'Ditolak',
-    expired: 'Expired',
+    expired: 'EXPIRED',
     canceled: 'Dibatalkan'
 }[status]);
 

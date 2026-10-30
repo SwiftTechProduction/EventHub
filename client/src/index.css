@@ -373,6 +373,12 @@ button:disabled {
   color: #be123c;
 }
 
+.status-expired {
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .modal-backdrop {
   position: fixed;
   z-index: 60;
