@@ -74,7 +74,13 @@ export const getEvents = async (req, res) => {
         res.json(events.rows);
     } catch (error) {
         console.error('Event list lookup failed:', error);
-        res.status(500).json({ message: 'Server gagal memuat daftar event.' });
+        const errorCode = typeof error === 'object' && error !== null && 'code' in error
+            ? String(error.code)
+            : undefined;
+        res.status(500).json({
+            message: 'Server gagal memuat daftar event.',
+            ...(errorCode ? { errorCode } : {})
+        });
     }
 };
 
