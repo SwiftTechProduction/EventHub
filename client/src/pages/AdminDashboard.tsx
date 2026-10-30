@@ -286,7 +286,7 @@ const AdminDashboard = () => {
             <section className="dashboard-hero">
                 <div>
                     <span className="eyebrow text-white/65">{user?.role === 'it' ? 'ADMINISTRATOR IT' : user?.role === 'admin' ? 'ADMINISTRATOR' : 'EVENT ORGANIZER'}</span>
-                    <h1 className="mt-2 text-3xl font-extrabold text-white md:text-4xl">{user?.role === 'it' ? 'Panel IT' : 'Studio Event'}</h1>
+                    <h1 className="mt-2 text-3xl font-extrabold text-white md:text-4xl">{user?.role === 'it' ? 'Dashboard IT' : 'Dashboard Organizer'}</h1>
                     <p className="mt-2 text-sm text-white/70">{user?.role === 'it' ? 'Akses global: kelola customer, organizer, event, dan transaksi.' : 'Kelola acara, periksa pembayaran, dan lihat perkembangan penjualan.'}</p>
                 </div>
                 <button onClick={() => { setEditingEventId(null); setFormData(emptyForm); setShowEventForm(!showEventForm); }} className="button-light">

@@ -27,7 +27,7 @@ const Navbar = () => {
                         <>
                             <NavLink to={dashboardPath} className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
                                 {['it', 'admin', 'organizer'].includes(user.role)
-                                    ? <><FaCalendarAlt className="mr-1 inline" />{user.role === 'it' ? 'Panel IT' : 'Studio'}</>
+                                    ? <><FaCalendarAlt className="mr-1 inline" />{user.role === 'it' ? 'Dashboard IT' : 'Dashboard Organizer'}</>
                                     : 'Akun saya'}
                             </NavLink>
                             <button onClick={handleLogout} className="button-primary min-h-9 px-4 py-2 text-xs">Keluar</button>

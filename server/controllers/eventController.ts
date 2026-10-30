@@ -48,7 +48,7 @@ const normalizeTicketTypes = (ticketTypes: unknown) => {
 export const getEvents = async (req, res) => {
     try {
         const values: unknown[] = [];
-        const filters = ['e.end_date >= NOW()', 'e.is_deleted = FALSE'];
+        const filters = ['COALESCE(e.end_date, e.date) >= NOW()', 'e.is_deleted = FALSE'];
         for (const [key, column] of [['category', 'e.category'], ['location', 'e.location']] as const) {
             const value = String(req.query[key] || '').trim();
             if (value) {
