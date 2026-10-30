@@ -20,6 +20,10 @@
     "dev:all": "npm run install:all && npm run dev",
     "start:all": "npm run install:all && npm run start"
   },
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "concurrently": "^9.0.1"
