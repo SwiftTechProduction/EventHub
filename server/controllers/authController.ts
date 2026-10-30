@@ -225,7 +225,7 @@ export const verifyOTP = async (req, res) => {
             return user.rows[0] || null;
         });
 
-        if (!result) return res.status(400).json({ message: 'Kode OTP salah atau sudah kedaluwarsa.' });
+        if (!result) return res.status(400).json({ message: 'Kode OTP salah atau sudah expired.' });
         res.json({ ...result, token: generateToken(result._id, result.role) });
     } catch (error) {
         console.error('OTP verification failed:', error);
@@ -356,7 +356,7 @@ export const resetPassword = async (req, res) => {
             await client.query('DELETE FROM otps WHERE id = $1', [validOTP.rows[0].id]);
             return true;
         });
-        if (!updated) return res.status(400).json({ message: 'Kode reset salah atau sudah kedaluwarsa.' });
+        if (!updated) return res.status(400).json({ message: 'Kode reset salah atau sudah expired.' });
         res.json({ message: 'Password berhasil diatur ulang. Silakan login kembali.' });
     } catch (error) {
         console.error('Password reset failed:', error);

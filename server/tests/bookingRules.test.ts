@@ -13,7 +13,7 @@ test('diskon persentase dan nominal tidak mengurangi harga di bawah nol', () => 
     assert.equal(calculateDiscount(300_000, 'percent', 150), 300_000);
 });
 
-/** Memastikan transaksi hanya kedaluwarsa setelah melewati tenggat yang sesuai. */
+/** Memastikan transaksi hanya expired setelah melewati tenggat yang sesuai. */
 test('status otomatis mengikuti tenggat pembayaran dan konfirmasi', () => {
     const now = Date.parse('2026-10-16T00:00:00.000Z');
     assert.equal(getExpiredBookingStatus('waiting_for_payment', '2026-10-15T23:00:00.000Z', null, now), 'expired');

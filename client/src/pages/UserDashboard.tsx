@@ -205,7 +205,7 @@ const UserDashboard = () => {
                                                 <p className="text-sm font-semibold text-amber-900">
                                                     Unggah bukti sebelum {new Date(booking.paymentDeadline).toLocaleString('id-ID')}.
                                                 </p>
-                                                <p className="mt-1 text-xs text-amber-700">Transaksi akan kedaluwarsa otomatis saat hitung mundur habis.</p>
+                                                <p className="mt-1 text-xs text-amber-700">Transaksi akan expired otomatis saat hitung mundur habis.</p>
                                                 <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg bg-amber-900 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800">
                                                     Pilih bukti pembayaran
                                                     <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => void uploadProof(booking._id, e.target.files?.[0])} />
@@ -311,7 +311,7 @@ const statusLabel = (status: Booking['status']): string => ({
     waiting_for_admin_confirmation: 'Menunggu konfirmasi organizer',
     done: 'Selesai',
     rejected: 'Ditolak',
-    expired: 'Kedaluwarsa',
+    expired: 'Expired',
     canceled: 'Dibatalkan'
 }[status]);
 

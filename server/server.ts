@@ -16,7 +16,7 @@ const start = async () => {
     const expirationTimer = setInterval(() => {
         expireStaleBookings()
             .then((count) => {
-                if (count) console.info(`${count} transaksi kedaluwarsa dan sumber daya telah dikembalikan.`);
+                if (count) console.info(`${count} transaksi expired dan kuota telah dikembalikan.`);
             })
             .catch((error) => console.error('Pemeriksaan batas waktu transaksi gagal:', error));
     }, 60_000);

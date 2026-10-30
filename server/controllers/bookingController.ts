@@ -72,7 +72,7 @@ export const bookEvent = async (req, res) => {
                  FOR UPDATE`,
                 [req.user.email, otp]
             );
-            if (!validOTP.rowCount) return { error: 'Kode OTP salah atau sudah kedaluwarsa.', status: 400 };
+            if (!validOTP.rowCount) return { error: 'Kode OTP salah atau sudah expired.', status: 400 };
 
             const eventResult = await client.query(
                 `SELECT id, title, date, end_date, ticket_price, ticket_types, available_seats
@@ -123,7 +123,7 @@ export const bookEvent = async (req, res) => {
                      FOR UPDATE`,
                     [req.user.id, String(req.body.couponCode).trim().toUpperCase()]
                 );
-                if (!coupon.rowCount) return { error: 'Kupon tidak valid, sudah dipakai, atau kedaluwarsa.', status: 400 };
+                if (!coupon.rowCount) return { error: 'Kupon tidak valid, sudah dipakai, atau expired.', status: 400 };
                 couponId = coupon.rows[0].id;
                 const value = calculateDiscount(
                     subtotal - discountAmount,

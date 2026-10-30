@@ -471,7 +471,7 @@ const AdminDashboard = () => {
                                 }}
                             >
                                 <option value="active">Aktif</option>
-                                <option value="expired">Kedaluwarsa</option>
+                                <option value="expired">Expired</option>
                                 <option value="inactive">Nonaktif</option>
                                 <option value="all">Semua</option>
                             </select>
@@ -687,7 +687,7 @@ const statusLabel = (status: Booking['status']): string => ({
     waiting_for_admin_confirmation: 'Menunggu konfirmasi organizer',
     done: 'Selesai',
     rejected: 'Ditolak',
-    expired: 'Kedaluwarsa',
+    expired: 'Expired',
     canceled: 'Dibatalkan'
 }[status]);
 

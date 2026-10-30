@@ -23,7 +23,7 @@ export const calculateDiscount = (
     return Math.min(Math.round(discount * 100) / 100, subtotal);
 };
 
-/** Memecah pemakaian poin dari kredit terdekat kedaluwarsa agar refund tepat. */
+/** Memecah pemakaian poin dari kredit terdekat expired agar refund tepat. */
 export const planPointAllocations = (
     credits: Array<{ id: number | string; remaining: number }>,
     amount: number
