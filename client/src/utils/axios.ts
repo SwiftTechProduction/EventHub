@@ -5,8 +5,13 @@ const configuredApiUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, ''
 const normalizedApiUrl = configuredApiUrl && /^https?:\/\/[^/]+$/i.test(configuredApiUrl)
     ? `${configuredApiUrl}/api`
     : configuredApiUrl;
+const isLocalApiUrl = normalizedApiUrl
+    ? /^https?:\/\/(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:\/|$)/i.test(normalizedApiUrl)
+    : false;
 const apiBaseUrl = import.meta.env.PROD
-    ? '/api'
+    ? normalizedApiUrl && /^https?:\/\//i.test(normalizedApiUrl) && !isLocalApiUrl
+        ? normalizedApiUrl
+        : '/api'
     : normalizedApiUrl || '/api';
 
 const api = axios.create({

@@ -1,5 +1,19 @@
 # React + TypeScript + Vite
 
+## Deploy ke Vercel
+
+Deploy frontend dan backend sebagai dua Vercel project dari repository yang sama:
+
+- Frontend: **Root Directory** `client`; set `VITE_API_URL` ke origin production project backend (contoh `https://eventhub-api.vercel.app`, tanpa `/api`).
+- Backend: **Root Directory** `server`; set `DATABASE_URL` dan `JWT_SECRET` pada environment **Production**. Set `CLIENT_ORIGIN` ke origin frontend jika berbeda dari `https://eventhub-purwadhika.vercel.app`.
+- Redeploy kedua project setelah mengubah Root Directory atau Environment Variables. `VITE_API_URL` dibaca saat build frontend.
+
+Tes backend di `https://<backend-origin>/api/health`. Respons sehat adalah JSON `{"status":"ok"}`; daftar event tersedia di `/api/events`.
+
+Jangan gunakan Root Directory `.` untuk deployment frontend/backend terpisah: environment variables Vercel bersifat per-project dan tidak dibagikan antarproject.
+
+---
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
