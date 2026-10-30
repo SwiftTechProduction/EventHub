@@ -13,8 +13,11 @@ const categories = [
     { label: 'Seni', value: 'Seni' },
     { label: 'Olahraga', value: 'Olahraga' },
     { label: 'Kuliner', value: 'Kuliner' },
-    { label: 'Pendidikan', value: 'Pendidikan' }
+    { label: 'Pendidikan', value: 'Pendidikan' },
+    { label: 'Travel', value: 'Travel' }
 ];
+
+const eventsPerPage = 9;
 
 /** Menampilkan katalog EventHub dengan pencarian jeda, kategori, dan lokasi. */
 const Home = () => {
@@ -25,12 +28,17 @@ const Home = () => {
     const [location, setLocation] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [eventPage, setEventPage] = useState(1);
 
     /** Menunda pencarian singkat agar API tidak dipanggil pada setiap ketikan. */
     useEffect(() => {
         const timer = window.setTimeout(() => setSearch(searchInput.trim()), 350);
         return () => window.clearTimeout(timer);
     }, [searchInput]);
+
+    useEffect(() => {
+        setEventPage(1);
+    }, [search, category, location]);
 
     /** Meminta hasil event saat kata kunci, kategori, atau lokasi berubah. */
     useEffect(() => {
@@ -53,6 +61,14 @@ const Home = () => {
 
     /** Menghitung jumlah event gratis untuk ringkasan hasil pencarian. */
     const freeEvents = useMemo(() => events.filter((event) => event.ticketPrice === 0).length, [events]);
+    const eventPageCount = Math.ceil(events.length / eventsPerPage);
+    const paginatedEvents = events.slice((eventPage - 1) * eventsPerPage, eventPage * eventsPerPage);
+
+    useEffect(() => {
+        if (eventPageCount > 0 && eventPage > eventPageCount) {
+            setEventPage(eventPageCount);
+        }
+    }, [eventPage, eventPageCount]);
 
     return (
         <div className="mx-auto max-w-7xl">
@@ -142,7 +158,7 @@ const Home = () => {
                     </div>
                 ) : (
                     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                        {events.map((event) => (
+                        {paginatedEvents.map((event) => (
                             <Link key={event._id} to={`/events/${event._id}`} className="surface-card group overflow-hidden transition duration-300 hover:-translate-y-1 hover:shadow-xl">
                                 <div className="relative h-56 overflow-hidden bg-gradient-to-br from-violet-100 to-fuchsia-100">
                                     {event.image ? <img src={event.image} alt={event.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /> :
@@ -166,6 +182,27 @@ const Home = () => {
                             </Link>
                         ))}
                     </div>
+                )}
+                {!loading && eventPageCount > 1 && (
+                    <nav className="mt-7 flex items-center justify-center gap-4" aria-label="Halaman event mendatang">
+                        <button
+                            type="button"
+                            className="button-secondary"
+                            disabled={eventPage === 1}
+                            onClick={() => setEventPage((page) => Math.max(1, page - 1))}
+                        >
+                            Sebelumnya
+                        </button>
+                        <span className="text-sm font-semibold text-slate-600">Halaman {eventPage} dari {eventPageCount}</span>
+                        <button
+                            type="button"
+                            className="button-primary"
+                            disabled={eventPage === eventPageCount}
+                            onClick={() => setEventPage((page) => Math.min(eventPageCount, page + 1))}
+                        >
+                            Berikutnya
+                        </button>
+                    </nav>
                 )}
             </section>
         </div>
