@@ -21,7 +21,7 @@
         "nodemailer": "^6.9.11",
         "pg": "^8.13.1"
     },
-    "devDependencies": {
+    "Dependencies": {
         "@types/bcryptjs": "^2.4.6",
         "@types/cors": "^2.8.17",
         "@types/express": "^4.17.21",
