@@ -24,9 +24,13 @@ const EventDetail = () => {
     const [averageRating, setAverageRating] = useState(0);
     const [selectedTicket, setSelectedTicket] = useState('');
     const [quantity, setQuantity] = useState(1);
+    const [couponCode, setCouponCode] = useState('');
     const [voucherCode, setVoucherCode] = useState('');
     const [pointsToUse, setPointsToUse] = useState(0);
     const [pointsBalance, setPointsBalance] = useState(0);
+    const [otp, setOtp] = useState('');
+    const [showOTP, setShowOTP] = useState(false);
+    const [developmentOtp, setDevelopmentOtp] = useState('');
     const [reviewRating, setReviewRating] = useState(5);
     const [reviewComment, setReviewComment] = useState('');
     const [loading, setLoading] = useState(true);
@@ -66,21 +70,35 @@ const EventDetail = () => {
 
     /** Meminta OTP atau mengirim order beserta pilihan tiket dan diskonnya. */
     const handleCheckout = async () => {
+        if (!user) {
+            navigate('/login');
+            return;
+        }
         setBusy(true);
         setError('');
         setNotice('');
         try {
+            if (!showOTP) {
+                const { data } = await api.post('/bookings/send-otp');
+                setDevelopmentOtp(data.developmentOtp || '');
+                setShowOTP(true);
+                setNotice(data.message);
+            } else {
                 const { data } = await api.post('/bookings', {
                     eventId: event?._id,
+                    otp,
                     quantity,
                     ticketType: selectedTicket,
+                    couponCode: couponCode.trim() || undefined,
                     voucherCode: voucherCode.trim() || undefined,
                     pointsToUse
                 });
                 setNotice(data.emailSent
                     ? `${data.message} Konfirmasi pesanan juga sudah dikirim ke email akun Anda.`
                     : `${data.message} Email konfirmasi belum terkirim; periksa konfigurasi SMTP.`);
+                setShowOTP(false);
                 window.setTimeout(() => navigate('/dashboard'), 1200);
+            }
         } catch (caught) {
             setError(caught.response?.data?.message || 'Transaksi belum berhasil dibuat.');
         } finally {
@@ -111,6 +129,7 @@ const EventDetail = () => {
     if (!event) return <div className="page-message">{error || 'Event tidak ditemukan.'}</div>;
 
     const isSoldOut = event.availableSeats < 1;
+    const isCustomer = user && ['user', 'customer'].includes(user.role);
 
     return (
         <div className="mx-auto max-w-6xl">
@@ -161,6 +180,7 @@ const EventDetail = () => {
 
                     <article className="surface-card p-6 md:p-8">
                         <h2 className="text-2xl font-extrabold text-slate-900">Cerita dari peserta</h2>
+                        {isCustomer && (
                             <form onSubmit={submitReview} className="mt-5 rounded-2xl bg-slate-50 p-5">
                                 <label className="field-label" htmlFor="review-rating">Rating Anda</label>
                                 <select id="review-rating" value={reviewRating} onChange={(e) => setReviewRating(Number(e.target.value))} className="field-control">
@@ -170,6 +190,7 @@ const EventDetail = () => {
                                 <textarea id="review-comment" value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} className="field-control min-h-24" maxLength={1000} placeholder="Bagikan pengalaman setelah menghadiri event ini." />
                                 <button className="button-primary mt-4" disabled={busy}>Kirim ulasan</button>
                             </form>
+                        )}
                         <div className="mt-6 space-y-4">
                             {reviews.length === 0 ? (
                                 <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-500">Belum ada ulasan. Peserta dapat memberikan penilaian setelah event selesai.</p>
@@ -207,6 +228,10 @@ const EventDetail = () => {
 
                     <div className="mt-5 grid grid-cols-2 gap-3">
                         <div>
+                            <label className="field-label" htmlFor="coupon-code">Kupon referral</label>
+                            <input id="coupon-code" className="field-control uppercase" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} placeholder="WELCOME…" />
+                        </div>
+                        <div>
                             <label className="field-label" htmlFor="voucher-code">Voucher event</label>
                             <input id="voucher-code" className="field-control uppercase" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value.toUpperCase())} placeholder="KODE VOUCHER" />
                         </div>
@@ -224,8 +249,15 @@ const EventDetail = () => {
                         {pointsToUse > 0 && <div className="flex justify-between text-emerald-700"><span>Poin digunakan</span><span>−{formatRupiah(pointsToUse)}</span></div>}
                         <div className="flex justify-between pt-2 text-lg font-extrabold text-slate-900"><span>Total</span><span>{formatRupiah(Math.max(0, subtotal - pointsToUse))}</span></div>
                     </div>
-                    <button onClick={handleCheckout} disabled={busy || isSoldOut} className="button-primary mt-6 w-full">
-                        {busy ? 'Memproses…' : isSoldOut ? 'Tiket habis' : 'Lanjutkan pemesanan'}
+                    {showOTP && (
+                        <div className="mt-5">
+                            <label className="field-label" htmlFor="checkout-otp">Kode OTP dari email</label>
+                            <input id="checkout-otp" inputMode="numeric" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} className="field-control text-center font-bold tracking-[0.4em]" />
+                        </div>
+                    )}
+                    {developmentOtp && <p className="notice notice-info mt-4">Kode lokal: <strong className="tracking-widest">{developmentOtp}</strong></p>}
+                    <button onClick={handleCheckout} disabled={busy || isSoldOut || (showOTP && otp.length !== 6)} className="button-primary mt-6 w-full">
+                        {busy ? 'Memproses…' : showOTP ? 'Verifikasi & buat transaksi' : isSoldOut ? 'Tiket habis' : 'Lanjutkan pemesanan'}
                     </button>
                     {error && <p role="alert" className="notice notice-error mt-4">{error}</p>}
                     {notice && <p role="status" className="notice notice-success mt-4">{notice}</p>}
