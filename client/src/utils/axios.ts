@@ -11,7 +11,7 @@ const isLocalApiUrl = normalizedApiUrl
 const apiBaseUrl = import.meta.env.PROD
     ? normalizedApiUrl && /^https?:\/\//i.test(normalizedApiUrl) && !isLocalApiUrl
         ? normalizedApiUrl
-        : 'https://eventhub-purwadhikaserver.vercel.app/api'
+        : '/api'
     : normalizedApiUrl || '/api';
 
 const api = axios.create({
