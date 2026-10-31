@@ -48,11 +48,23 @@ button:disabled {
 }
 
 .site-header-inner {
+  position: relative;
   display: flex;
   min-height: 76px;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.primary-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.75rem;
+}
+
+.mobile-menu-toggle {
+  display: none;
 }
 
 .brand-mark {
@@ -403,12 +415,58 @@ button:disabled {
   background: rgba(255, 255, 255, .72);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .site-header-inner {
     min-height: 68px;
-    flex-wrap: wrap;
-    padding-top: .6rem;
-    padding-bottom: .6rem;
+  }
+
+  .mobile-menu-toggle {
+    display: inline-grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    place-items: center;
+    border: 1px solid #e4e5ef;
+    border-radius: .85rem;
+    background: white;
+    color: #5938cc;
+    font-size: 1.1rem;
+  }
+
+  .primary-navigation {
+    position: absolute;
+    z-index: 31;
+    top: calc(100% - 1px);
+    right: 0;
+    left: 0;
+    display: none;
+    align-items: stretch;
+    flex-direction: column;
+    gap: .25rem;
+    border: 1px solid #e9eaf2;
+    border-top: 0;
+    border-radius: 0 0 1rem 1rem;
+    background: white;
+    padding: .75rem 1rem 1rem;
+    box-shadow: 0 16px 30px rgba(28, 35, 62, .12);
+  }
+
+  .primary-navigation-open {
+    display: flex;
+  }
+
+  .primary-navigation .nav-link {
+    border-radius: .65rem;
+    padding: .7rem .55rem;
+  }
+
+  .primary-navigation .nav-link:hover,
+  .primary-navigation .nav-link-active {
+    background: #f6f3ff;
+  }
+
+  .primary-navigation .button-primary {
+    width: 100%;
+    margin-top: .25rem;
   }
 
   .dashboard-hero {
