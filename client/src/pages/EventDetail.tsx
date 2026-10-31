@@ -30,7 +30,7 @@ const EventDetail = () => {
     const [quantity, setQuantity] = useState(1);
     const [couponCode, setCouponCode] = useState('');
     const [voucherCode, setVoucherCode] = useState('');
-    const [pointsToUse, setPointsToUse] = useState(0);
+    const [pointsToUse, setPointsToUse] = useState('0');
     const [pointsBalance, setPointsBalance] = useState(0);
     const [otp, setOtp] = useState('');
     const [showOTP, setShowOTP] = useState(false);
@@ -42,6 +42,11 @@ const EventDetail = () => {
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [scheduleConflicts, setScheduleConflicts] = useState<ScheduleConflict[] | null>(null);
+
+    const getReviewsEndpoint = () => {
+        const params = new URLSearchParams({ eventId: String(id), action: 'reviews' });
+        return `/events?${params.toString()}`;
+    };
 
     useEffect(() => {
         if (!id) return;
@@ -63,7 +68,7 @@ const EventDetail = () => {
             .finally(() => {
                 if (active) setLoading(false);
             });
-        api.get(`/events/${id}/reviews`)
+        api.get(getReviewsEndpoint())
             .then(({ data }) => {
                 if (!active) return;
                 setReviews(data.reviews);
@@ -90,7 +95,9 @@ const EventDetail = () => {
     const unitPrice = ticket?.price ?? event?.ticketPrice ?? 0;
     const subtotal = unitPrice * quantity;
     const canApplyDiscounts = Number(event?.ticketPrice) > 0 && unitPrice > 0;
-    const appliedPoints = canApplyDiscounts ? pointsToUse : 0;
+    const appliedPoints = canApplyDiscounts
+        ? Math.max(0, Math.min(Number(pointsToUse) || 0, pointsBalance, subtotal))
+        : 0;
 
     /** Meminta OTP atau mengirim order beserta pilihan tiket dan diskonnya. */
     const handleCheckout = async (allowScheduleConflict = false) => {
@@ -142,8 +149,9 @@ const EventDetail = () => {
         setBusy(true);
         setError('');
         try {
-            await api.post(`/events/${id}/reviews`, { rating: reviewRating, comment: reviewComment });
-            const { data } = await api.get(`/events/${id}/reviews`);
+            const params = new URLSearchParams({ eventId: String(id), action: 'review' });
+            await api.post(`/events?${params.toString()}`, { rating: reviewRating, comment: reviewComment });
+            const { data } = await api.get(getReviewsEndpoint());
             setReviews(data.reviews);
             setAverageRating(Number(data.average));
             setReviewComment('');
@@ -278,7 +286,7 @@ const EventDetail = () => {
                                 <div className="mt-4">
                                     <label className="field-label" htmlFor="points-use">Poin (saldo {pointsBalance.toLocaleString('id-ID')})</label>
                                     <input id="points-use" type="number" min={0} max={Math.min(pointsBalance, subtotal)} value={pointsToUse}
-                                        onChange={(e) => setPointsToUse(Math.max(0, Math.min(Number(e.target.value), pointsBalance, subtotal)))}
+                                        onChange={(e) => setPointsToUse(e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, ''))}
                                         className="field-control" />
                                 </div>
                             )}
@@ -305,7 +313,7 @@ const EventDetail = () => {
                     </button>
                     {error && <p role="alert" className="notice notice-error mt-4">{error}</p>}
                     {notice && <p role="status" className="notice notice-success mt-4">{notice}</p>}
-                    {subtotal - pointsToUse > 0 && <p className="mt-3 text-center text-xs leading-5 text-slate-400">Waktu unggah bukti pembayaran adalah 2 jam setelah transaksi dibuat.</p>}
+                    {subtotal - appliedPoints > 0 && <p className="mt-3 text-center text-xs leading-5 text-slate-400">Waktu unggah bukti pembayaran adalah 2 jam setelah transaksi dibuat.</p>}
                 </aside>
             </div>
             {scheduleConflicts && (

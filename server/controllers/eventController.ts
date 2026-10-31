@@ -335,6 +335,7 @@ export const getEventAttendees = async (req, res) => {
 
 /** Mengambil rating dan ulasan publik pada event yang dipilih. */
 export const getEventReviews = async (req, res) => {
+    const eventId = req.params.id || String(req.query.eventId);
     try {
         const reviews = await pool.query(
             `SELECT r.id AS "_id", r.rating, r.comment, r.created_at AS "createdAt",
@@ -342,13 +343,13 @@ export const getEventReviews = async (req, res) => {
              FROM event_reviews r JOIN users u ON u.id = r.user_id
              JOIN events e ON e.id = r.event_id AND e.is_deleted = FALSE
              WHERE r.event_id = $1 ORDER BY r.created_at DESC`,
-            [req.params.id]
+            [eventId]
         );
         const rating = await pool.query(
             `SELECT COALESCE(AVG(r.rating), 0)::numeric(3,2) AS average, COUNT(r.id)::int AS count
              FROM events e LEFT JOIN event_reviews r ON r.event_id = e.id
              WHERE e.id = $1 AND e.is_deleted = FALSE`,
-            [req.params.id]
+            [eventId]
         );
         res.json({ reviews: reviews.rows, ...rating.rows[0] });
     } catch (error) {
@@ -359,6 +360,7 @@ export const getEventReviews = async (req, res) => {
 
 /** Menyimpan ulasan hanya dari peserta yang transaksinya selesai setelah event. */
 export const createEventReview = async (req, res) => {
+    const eventId = req.params.id || String(req.query.eventId);
     try {
         const rating = Number(req.body.rating);
         const comment = String(req.body.comment || '').trim();
@@ -368,7 +370,7 @@ export const createEventReview = async (req, res) => {
         const result = await withTransaction(async (client) => {
             const event = await client.query(
                 'SELECT id FROM events WHERE id = $1 AND is_deleted = FALSE FOR UPDATE',
-                [req.params.id]
+                [eventId]
             );
             if (!event.rowCount) return { error: 'Event tidak ditemukan.', status: 404 };
             const attendee = await client.query(
@@ -376,7 +378,7 @@ export const createEventReview = async (req, res) => {
                  FROM bookings b JOIN events e ON e.id = b.event_id
                  WHERE b.user_id = $1 AND b.event_id = $2
                  FOR UPDATE OF b`,
-                [req.user.id, req.params.id]
+                [req.user.id, eventId]
             );
             if (!attendee.rowCount) {
                 return { error: 'Anda belum pernah memesan tiket event ini. Pesan tiket dan hadiri event sebelum menulis ulasan.', status: 403 };
@@ -388,7 +390,7 @@ export const createEventReview = async (req, res) => {
                 `INSERT INTO event_reviews (event_id, user_id, rating, comment)
                  VALUES ($1, $2, $3, $4)
                  RETURNING id AS "_id", rating, comment, created_at AS "createdAt"`,
-                [req.params.id, req.user.id, rating, comment]
+                [eventId, req.user.id, rating, comment]
             );
             return { review: review.rows[0] };
         });
