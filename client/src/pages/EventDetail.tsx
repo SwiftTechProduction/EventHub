@@ -14,6 +14,19 @@ interface EventReview {
     user: { name: string; profileImage?: string };
 }
 
+type ScheduleConflict = Pick<EventItem, '_id' | 'title' | 'date' | 'endDate'>;
+
+const formatEventSchedule = (date: string, endDate?: string) => {
+    const start = new Date(date);
+    const end = new Date(endDate || date);
+    const formattedStart = start.toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
+    if (start.getTime() === end.getTime()) return formattedStart;
+    const formattedEnd = start.toDateString() === end.toDateString()
+        ? end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        : end.toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
+    return `${formattedStart}–${formattedEnd}`;
+};
+
 /** Menampilkan detail event, proses checkout, dan ulasan peserta. */
 const EventDetail = () => {
     const { id } = useParams();
@@ -21,6 +34,7 @@ const EventDetail = () => {
     const { user } = useAuth();
     const [event, setEvent] = useState<EventItem | null>(null);
     const [reviews, setReviews] = useState<EventReview[]>([]);
+    const [reviewError, setReviewError] = useState('');
     const [averageRating, setAverageRating] = useState(0);
     const [selectedTicket, setSelectedTicket] = useState('');
     const [quantity, setQuantity] = useState(1);
@@ -37,20 +51,38 @@ const EventDetail = () => {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+    const [scheduleConflicts, setScheduleConflicts] = useState<ScheduleConflict[] | null>(null);
 
     useEffect(() => {
         if (!id) return;
-        Promise.all([
-            api.get(`/events/${id}`),
-            api.get(`/events/${id}/reviews`)
-        ]).then(([eventResponse, reviewResponse]) => {
-            setEvent(eventResponse.data);
-            setSelectedTicket(eventResponse.data.ticketTypes?.[0]?.name || 'General Admission');
-            setReviews(reviewResponse.data.reviews);
-            setAverageRating(Number(reviewResponse.data.average));
-        }).catch((caught) => {
-            setError(caught.response?.data?.message || 'Detail event belum dapat dimuat.');
-        }).finally(() => setLoading(false));
+        let active = true;
+        setLoading(true);
+        setEvent(null);
+        setError('');
+        setReviewError('');
+        setReviews([]);
+        api.get(`/events/${id}`)
+            .then(({ data }) => {
+                if (!active) return;
+                setEvent(data);
+                setSelectedTicket(data.ticketTypes?.[0]?.name || 'General Admission');
+            })
+            .catch((caught) => {
+                if (active) setError(caught.response?.data?.message || 'Detail event belum dapat dimuat.');
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+        api.get(`/events/${id}/reviews`)
+            .then(({ data }) => {
+                if (!active) return;
+                setReviews(data.reviews);
+                setAverageRating(Number(data.average));
+            })
+            .catch((caught) => {
+                if (active) setReviewError(caught.response?.data?.message || 'Ulasan event belum dapat dimuat.');
+            });
+        return () => { active = false; };
     }, [id]);
 
     useEffect(() => {
@@ -71,7 +103,7 @@ const EventDetail = () => {
     const appliedPoints = canApplyDiscounts ? pointsToUse : 0;
 
     /** Meminta OTP atau mengirim order beserta pilihan tiket dan diskonnya. */
-    const handleCheckout = async () => {
+    const handleCheckout = async (allowScheduleConflict = false) => {
         if (!user) {
             navigate('/login');
             return;
@@ -79,6 +111,7 @@ const EventDetail = () => {
         setBusy(true);
         setError('');
         setNotice('');
+        if (allowScheduleConflict) setScheduleConflicts(null);
         try {
             if (!showOTP) {
                 const { data } = await api.post('/bookings/send-otp');
@@ -93,7 +126,8 @@ const EventDetail = () => {
                     ticketType: selectedTicket,
                     couponCode: canApplyDiscounts ? couponCode.trim() || undefined : undefined,
                     voucherCode: canApplyDiscounts ? voucherCode.trim() || undefined : undefined,
-                    pointsToUse: appliedPoints
+                    pointsToUse: appliedPoints,
+                    ...(allowScheduleConflict ? { allowScheduleConflict: true } : {})
                 });
                 setNotice(data.emailSent
                     ? `${data.message} Konfirmasi pesanan juga sudah dikirim ke email akun Anda.`
@@ -102,7 +136,11 @@ const EventDetail = () => {
                 window.setTimeout(() => navigate('/dashboard'), 1200);
             }
         } catch (caught) {
-            setError(caught.response?.data?.message || 'Transaksi belum berhasil dibuat.');
+            if (caught.response?.data?.code === 'EVENT_SCHEDULE_CONFLICT') {
+                setScheduleConflicts(caught.response.data.conflicts || []);
+            } else {
+                setError(caught.response?.data?.message || 'Transaksi belum berhasil dibuat.');
+            }
         } finally {
             setBusy(false);
         }
@@ -194,7 +232,9 @@ const EventDetail = () => {
                             </form>
                         )}
                         <div className="mt-6 space-y-4">
-                            {reviews.length === 0 ? (
+                            {reviewError ? (
+                                <p role="alert" className="notice notice-error mt-4">{reviewError}</p>
+                            ) : reviews.length === 0 ? (
                                 <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-500">Belum ada ulasan. Peserta dapat memberikan penilaian setelah event selesai.</p>
                             ) : reviews.map((review) => (
                                 <div key={review._id} className="border-b border-slate-100 pb-4 last:border-0">
@@ -271,7 +311,7 @@ const EventDetail = () => {
                         </div>
                     )}
                     {developmentOtp && <p className="notice notice-info mt-4">Kode lokal: <strong className="tracking-widest">{developmentOtp}</strong></p>}
-                    <button onClick={handleCheckout} disabled={busy || isSoldOut || (showOTP && otp.length !== 6)} className="button-primary mt-6 w-full">
+                    <button onClick={() => void handleCheckout()} disabled={busy || isSoldOut || (showOTP && otp.length !== 6)} className="button-primary mt-6 w-full">
                         {busy ? 'Memproses…' : showOTP ? 'Verifikasi & buat transaksi' : isSoldOut ? 'Tiket habis' : 'Lanjutkan pemesanan'}
                     </button>
                     {error && <p role="alert" className="notice notice-error mt-4">{error}</p>}
@@ -279,6 +319,65 @@ const EventDetail = () => {
                     {subtotal - pointsToUse > 0 && <p className="mt-3 text-center text-xs leading-5 text-slate-400">Waktu unggah bukti pembayaran adalah 2 jam setelah transaksi dibuat.</p>}
                 </aside>
             </div>
+            {scheduleConflicts && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="schedule-conflict-title"
+                        className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl md:p-8"
+                    >
+                        <h2 id="schedule-conflict-title" className="text-xl font-extrabold text-slate-900">
+                            Jadwal tiket bertabrakan
+                        </h2>
+                        <p className="mt-3 text-sm leading-6 text-slate-600">
+                            Anda sudah memiliki tiket atau pemesanan untuk event berikut yang jadwalnya bertabrakan:
+                        </p>
+                        <ul className="mt-4 space-y-3">
+                            {scheduleConflicts.map((conflict) => (
+                                <li key={conflict._id} className="rounded-2xl bg-amber-50 p-4">
+                                    <strong className="block text-slate-900">{conflict.title}</strong>
+                                    <span className="mt-1 block text-sm text-slate-600">
+                                        {formatEventSchedule(conflict.date, conflict.endDate)}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                        <div className="mt-4 rounded-2xl bg-violet-50 p-4">
+                            <strong className="block text-violet-950">Event yang ingin Anda beli</strong>
+                            <span className="mt-1 block text-sm text-violet-800">
+                                {event ? `${event.title} · ${formatEventSchedule(event.date, event.endDate)}` : ''}
+                            </span>
+                        </div>
+                        <p className="mt-4 text-sm font-semibold text-slate-700">
+                            Apakah Anda ingin melanjutkan pembelian?
+                        </p>
+                        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                            <button
+                                type="button"
+                                className="button-secondary"
+                                disabled={busy}
+                                onClick={() => {
+                                    setScheduleConflicts(null);
+                                    setOtp('');
+                                    setShowOTP(false);
+                                    setDevelopmentOtp('');
+                                }}
+                            >
+                                No
+                            </button>
+                            <button
+                                type="button"
+                                className="button-primary"
+                                disabled={busy}
+                                onClick={() => void handleCheckout(true)}
+                            >
+                                {busy ? 'Memproses…' : 'Yes, lanjutkan'}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
         </div>
     );
 };

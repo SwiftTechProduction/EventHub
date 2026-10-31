@@ -2,6 +2,7 @@ import { randomInt } from 'crypto';
 import { pool, withTransaction } from '../db';
 import { calculateDiscount, canApplyDiscountToTicket, planPointAllocations } from '../utils/bookingRules';
 import { expireStaleBookings } from '../utils/bookingLifecycle';
+import { findOverlappingEvents } from '../utils/bookingSchedule';
 import { sendBookingCreatedEmail, sendOTPEmail, sendTransactionEmail } from '../utils/email';
 
 /** Membuat OTP acak enam digit untuk menjaga proses checkout tetap terverifikasi. */
@@ -93,6 +94,26 @@ export const bookEvent = async (req, res) => {
                 [req.user.id, eventId]
             );
             if (existing.rowCount) return { error: 'Anda sudah memiliki transaksi aktif untuk event ini.', status: 409 };
+
+            if (req.body.allowScheduleConflict !== true) {
+                const activeBookings = await client.query(
+                    `SELECT e.id AS "_id", e.title, e.date, e.end_date AS "endDate"
+                     FROM bookings b
+                     JOIN events e ON e.id = b.event_id
+                     WHERE b.user_id = $1 AND b.event_id <> $2
+                       AND b.status NOT IN ('canceled', 'rejected', 'expired')`,
+                    [req.user.id, eventId]
+                );
+                const conflicts = findOverlappingEvents(event, activeBookings.rows);
+                if (conflicts.length) {
+                    return {
+                        error: 'Jadwal event ini bertabrakan dengan tiket yang sudah Anda pesan.',
+                        status: 409,
+                        code: 'EVENT_SCHEDULE_CONFLICT',
+                        conflicts
+                    };
+                }
+            }
 
             const ticketTypes = Array.isArray(event.ticket_types) ? event.ticket_types : [];
             const selectedType = ticketTypes.find((ticket) => ticket.name === req.body.ticketType);
@@ -210,7 +231,13 @@ export const bookEvent = async (req, res) => {
             return { id: bookingId, status, paymentDeadline: amount > 0 };
         });
 
-        if (result.error) return res.status(result.status).json({ message: result.error });
+        if (result.error) {
+            return res.status(result.status).json({
+                message: result.error,
+                ...(result.code ? { code: result.code } : {}),
+                ...(result.conflicts ? { conflicts: result.conflicts } : {})
+            });
+        }
         const booking = await pool.query(`${bookingQuery} WHERE b.id = $1`, [result.id]);
         const emailSent = await sendBookingCreatedEmail(
             booking.rows[0].userId.email,

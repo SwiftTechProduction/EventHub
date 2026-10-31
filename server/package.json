@@ -7,7 +7,7 @@
     "scripts": {
         "build": "npx tsc -p tsconfig.json",
         "typecheck": "tsc -p tsconfig.json --noEmit",
-        "test": "tsx --test tests/bookingRules.test.ts tests/featureRules.test.ts",
+        "test": "tsx --test tests/bookingRules.test.ts tests/bookingSchedule.test.ts tests/featureRules.test.ts",
         "start": "node dist/server.js",
         "dev": "tsx watch server.ts",
         "seed": "tsx seed.ts"
