@@ -7,7 +7,7 @@ Deploy frontend dan backend sebagai dua Vercel project dari repository yang sama
 - Frontend: **Root Directory** `client`; set `VITE_API_URL` ke origin production project backend (contoh `https://eventhub-api.vercel.app`, tanpa `/api`).
 - Backend: **Root Directory** `server`; set `DATABASE_URL` dan `JWT_SECRET` pada environment **Production**. Set `CLIENT_ORIGIN` ke origin frontend jika berbeda dari `https://eventhub-purwadhika.vercel.app`.
 - Redeploy kedua project setelah mengubah Root Directory atau Environment Variables. `VITE_API_URL` dibaca saat build frontend.
-- Backend memakai fungsi API eksplisit untuk endpoint bertingkat. Setelah perubahan backend, deploy ulang project backend agar endpoint seperti `/api/bookings/:id/payment-proof/start` terdaftar di Vercel.
+- Backend memakai fungsi API eksplisit untuk endpoint bertingkat; wildcard bookings/events sengaja tidak dipakai karena Vercel tidak mengizinkan wildcard bertabrakan dengan rute `[id]`. Setelah perubahan backend, deploy ulang project backend agar endpoint seperti `/api/bookings/:id/payment-proof/start` terdaftar di Vercel.
 
 Tes backend di `https://<backend-origin>/api/health`. Respons sehat adalah JSON `{"status":"ok"}`; daftar event tersedia di `/api/events`.
 
