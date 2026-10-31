@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { FaGift, FaTicketAlt, FaUserCircle } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
@@ -189,11 +190,21 @@ const UserDashboard = () => {
                 const chunk = file.slice(start, Math.min(start + PAYMENT_PROOF_CHUNK_SIZE, file.size));
                 const dataUrl = await readAsDataUrl(chunk);
                 const content = dataUrl.slice(dataUrl.indexOf(',') + 1);
-                await api.post(getPaymentProofEndpoint(bookingId, 'chunk'), {
-                    uploadId,
-                    chunkIndex,
-                    content
-                });
+                for (let attempt = 0; ; attempt += 1) {
+                    try {
+                        await api.post(getPaymentProofEndpoint(bookingId, 'chunk'), {
+                            uploadId,
+                            chunkIndex,
+                            content
+                        });
+                        break;
+                    } catch (chunkError) {
+                        const retryable = axios.isAxiosError(chunkError) &&
+                            (!chunkError.response || chunkError.response.status >= 500);
+                        if (!retryable || attempt >= 2) throw chunkError;
+                        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+                    }
+                }
             }
             await api.post(getPaymentProofEndpoint(bookingId, 'complete'), { uploadId });
             setNotice('Bukti diterima. Organizer akan memeriksa transaksi Anda.');
@@ -206,7 +217,11 @@ const UserDashboard = () => {
                     console.warn('Sesi unggah bukti pembayaran akan dibersihkan otomatis.', cleanupError);
                 }
             }
-            setError(caught.response?.data?.message ||
+            const serverMessage = caught.response?.data?.message;
+            const serverErrorCode = caught.response?.data?.errorCode;
+            setError((serverMessage && serverErrorCode
+                ? `${serverMessage} (kode: ${serverErrorCode})`
+                : serverMessage) ||
                 (caught.message === 'Network Error'
                     ? 'Koneksi unggah terputus. Periksa koneksi ke server lalu coba unggah kembali.'
                     : caught.message || 'Bukti pembayaran belum dapat diunggah.'));

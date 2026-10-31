@@ -10,6 +10,43 @@ const PAYMENT_PROOF_RESPONSE_CHUNK_SIZE = 524_288;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PAYMENT_PROOF_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
+const isRetryableDatabaseError = (error: unknown): boolean => {
+    if (!error || typeof error !== 'object' || !('code' in error) || typeof error.code !== 'string') {
+        return false;
+    }
+
+    return error.code.startsWith('08') ||
+        [
+            '40001', '40P01', '53300', '57P01', '57P02', '57P03',
+            'ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH',
+            'ENOTFOUND', 'ETIMEDOUT', 'EPIPE'
+        ].includes(error.code);
+};
+
+const retryTransientDatabaseOperation = async <T>(operation: () => Promise<T>): Promise<T> => {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            return await operation();
+        } catch (error) {
+            if (attempt >= 2 || !isRetryableDatabaseError(error)) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+        }
+    }
+};
+
+const getDatabaseErrorCode = (error: unknown): string | undefined => {
+    if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        typeof error.code === 'string' &&
+        /^[A-Z0-9_]{1,32}$/.test(error.code)
+    ) {
+        return error.code;
+    }
+    return undefined;
+};
+
 /** Membuat OTP acak enam digit untuk menjaga proses checkout tetap terverifikasi. */
 const generateOTP = (): string => String(randomInt(100000, 1000000));
 
@@ -334,13 +371,13 @@ export const uploadPaymentProofChunk = async (req, res) => {
             return res.status(400).json({ message: 'Bagian file tidak valid. Silakan pilih ulang bukti pembayaran.' });
         }
 
-        const upload = await pool.query(
+        const upload = await retryTransientDatabaseOperation(() => pool.query(
             `SELECT id, file_size, total_chunks
              FROM payment_proof_uploads
              WHERE upload_id = $1 AND booking_id = $2 AND user_id = $3
                AND created_at >= NOW() - INTERVAL '24 hours'`,
             [uploadId, req.params.id, req.user.id]
-        );
+        ));
         if (!upload.rowCount || chunkIndex < 0 || chunkIndex >= upload.rows[0].total_chunks) {
             return res.status(404).json({ message: 'Sesi unggah tidak ditemukan atau sudah kedaluwarsa. Pilih file lagi.' });
         }
@@ -353,17 +390,21 @@ export const uploadPaymentProofChunk = async (req, res) => {
             return res.status(400).json({ message: 'Ukuran bagian file tidak sesuai. Silakan ulangi unggah bukti.' });
         }
 
-        await pool.query(
+        await retryTransientDatabaseOperation(() => pool.query(
             `INSERT INTO payment_proof_upload_chunks (upload_id, chunk_index, content, byte_length)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (upload_id, chunk_index)
              DO UPDATE SET content = EXCLUDED.content, byte_length = EXCLUDED.byte_length`,
             [uploadId, chunkIndex, content, decoded.length]
-        );
+        ));
         res.json({ received: chunkIndex });
     } catch (error) {
         console.error('Payment proof chunk upload failed:', error);
-        res.status(500).json({ message: 'Server gagal menerima bagian bukti pembayaran.' });
+        const errorCode = getDatabaseErrorCode(error);
+        res.status(500).json({
+            message: 'Server gagal menerima bagian bukti pembayaran.',
+            ...(errorCode ? { errorCode } : {})
+        });
     }
 };
 
