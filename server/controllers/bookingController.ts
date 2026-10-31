@@ -372,7 +372,7 @@ export const uploadPaymentProofChunk = async (req, res) => {
         }
 
         const upload = await retryTransientDatabaseOperation(() => pool.query(
-            `SELECT id, file_size, total_chunks
+            `SELECT upload_id, file_size, total_chunks
              FROM payment_proof_uploads
              WHERE upload_id = $1 AND booking_id = $2 AND user_id = $3
                AND created_at >= NOW() - INTERVAL '24 hours'`,
