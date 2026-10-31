@@ -6,6 +6,7 @@ import api from '../utils/axios';
 import type { Booking, EventForm, EventItem, ManagedAccount, OrganizerStat } from '../types';
 import { formatRupiah } from '../utils/currency';
 import { formatEventSchedule } from '../utils/eventSchedule';
+import { getPaymentProofEndpoint } from '../utils/paymentProof';
 
 const emptyForm: EventForm = {
     title: '', description: '', date: '', endDate: '', location: '',
@@ -252,11 +253,11 @@ const AdminDashboard = () => {
         setProofLoadingId(String(booking._id));
         setError('');
         try {
-            const first = await api.get(`/bookings/${booking._id}/payment-proof/chunk?index=0`);
+            const first = await api.get(getPaymentProofEndpoint(booking._id, 'read', { index: 0 }));
             const { prefix, totalChunks } = first.data;
             const encodedChunks = [first.data.content];
             for (let index = 1; index < totalChunks; index += 1) {
-                const { data } = await api.get(`/bookings/${booking._id}/payment-proof/chunk?index=${index}`);
+                const { data } = await api.get(getPaymentProofEndpoint(booking._id, 'read', { index }));
                 if (data.prefix !== prefix || data.totalChunks !== totalChunks || data.chunkIndex !== index) {
                     throw new Error('Bukti pembayaran berubah saat sedang dimuat. Silakan coba kembali.');
                 }

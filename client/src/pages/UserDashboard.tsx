@@ -6,6 +6,7 @@ import api from '../utils/axios';
 import type { Booking, UserProfile } from '../types';
 import { formatRupiah } from '../utils/currency';
 import { formatEventSchedule } from '../utils/eventSchedule';
+import { getPaymentProofEndpoint } from '../utils/paymentProof';
 
 const PAYMENT_PROOF_CHUNK_SIZE = 524_288;
 const MAX_PROOF_FILE_SIZE = 5_000_000;
@@ -176,7 +177,7 @@ const UserDashboard = () => {
             const normalizedMimeType = ['image/jpg', 'image/pjpeg'].includes(mimeType) ? 'image/jpeg' : mimeType;
             const totalChunks = Math.ceil(file.size / PAYMENT_PROOF_CHUNK_SIZE);
             uploadId = crypto.randomUUID();
-            await api.post(`/bookings/${bookingId}/payment-proof/start`, {
+            await api.post(getPaymentProofEndpoint(bookingId, 'start'), {
                 uploadId,
                 mimeType: normalizedMimeType,
                 fileSize: file.size,
@@ -188,19 +189,19 @@ const UserDashboard = () => {
                 const chunk = file.slice(start, Math.min(start + PAYMENT_PROOF_CHUNK_SIZE, file.size));
                 const dataUrl = await readAsDataUrl(chunk);
                 const content = dataUrl.slice(dataUrl.indexOf(',') + 1);
-                await api.post(`/bookings/${bookingId}/payment-proof/chunk`, {
+                await api.post(getPaymentProofEndpoint(bookingId, 'chunk'), {
                     uploadId,
                     chunkIndex,
                     content
                 });
             }
-            await api.post(`/bookings/${bookingId}/payment-proof/complete`, { uploadId });
+            await api.post(getPaymentProofEndpoint(bookingId, 'complete'), { uploadId });
             setNotice('Bukti diterima. Organizer akan memeriksa transaksi Anda.');
             await loadDashboard();
         } catch (caught) {
             if (uploadId) {
                 try {
-                    await api.delete(`/bookings/${bookingId}/payment-proof/upload/${uploadId}`);
+                    await api.delete(getPaymentProofEndpoint(bookingId, 'cancel', { uploadId }));
                 } catch (cleanupError) {
                     console.warn('Sesi unggah bukti pembayaran akan dibersihkan otomatis.', cleanupError);
                 }
