@@ -80,7 +80,10 @@ export default async (req: Request, res: Response): Promise<void> => {
     } catch (error) {
         const errorCode = getErrorCode(error);
         const detail = error instanceof Error ? error.message : 'Unknown startup error';
-        console.error('Serverless API initialization failed:', { errorCode });
+        console.error('Serverless API initialization failed:', {
+            errorCode,
+            errorMessage: detail
+        });
         res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.end(JSON.stringify({

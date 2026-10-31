@@ -1,6 +1,8 @@
 import { Pool } from 'pg';
 import type { PoolClient } from 'pg';
 
+const SCHEMA_MIGRATION_ADVISORY_LOCK_ID = 7324186251901;
+
 export const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     host: process.env.PGHOST,
@@ -27,7 +29,12 @@ export const initializeDatabase = async () => {
         );
     }
 
-    await pool.query(`
+    const client = await pool.connect();
+    let discardClient = false;
+    try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [SCHEMA_MIGRATION_ADVISORY_LOCK_ID]);
+        await client.query(`
         CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY,
             name TEXT NOT NULL,
@@ -233,7 +240,23 @@ export const initializeDatabase = async () => {
         CREATE INDEX IF NOT EXISTS point_transactions_referred_user_idx ON point_transactions(referred_user_id);
         CREATE INDEX IF NOT EXISTS event_vouchers_event_idx ON event_vouchers(event_id, starts_at, ends_at);
         CREATE INDEX IF NOT EXISTS event_reviews_event_idx ON event_reviews(event_id, created_at DESC);
-    `);
+        `);
+        await client.query('COMMIT');
+    } catch (error) {
+        try {
+            await client.query('ROLLBACK');
+        } catch (rollbackError) {
+            discardClient = true;
+            const rollbackCode = rollbackError && typeof rollbackError === 'object' &&
+                'code' in rollbackError && typeof rollbackError.code === 'string'
+                ? rollbackError.code
+                : undefined;
+            console.error('Database schema migration rollback failed:', { errorCode: rollbackCode });
+        }
+        throw error;
+    } finally {
+        client.release(discardClient);
+    }
 };
 
 /** Menjalankan sejumlah query dalam transaksi agar perubahan terkait tetap konsisten. */
