@@ -5,6 +5,11 @@ import { expireStaleBookings } from '../utils/bookingLifecycle';
 import { findOverlappingEvents } from '../utils/bookingSchedule';
 import { sendBookingCreatedEmail, sendOTPEmail, sendTransactionEmail } from '../utils/email';
 
+const PAYMENT_PROOF_CHUNK_SIZE = 524_288;
+const PAYMENT_PROOF_RESPONSE_CHUNK_SIZE = 524_288;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PAYMENT_PROOF_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+
 /** Membuat OTP acak enam digit untuk menjaga proses checkout tetap terverifikasi. */
 const generateOTP = (): string => String(randomInt(100000, 1000000));
 
@@ -12,7 +17,8 @@ const generateOTP = (): string => String(randomInt(100000, 1000000));
 const bookingQuery = `
     SELECT b.id AS "_id", b.status, b.payment_status AS "paymentStatus",
            b.amount, b.quantity, b.ticket_type AS "ticketType",
-           b.payment_proof AS "paymentProof", b.payment_deadline AS "paymentDeadline",
+           (NULLIF(b.payment_proof, '') IS NOT NULL) AS "hasPaymentProof",
+           b.payment_deadline AS "paymentDeadline",
            b.organizer_deadline AS "organizerDeadline", b.points_used AS "pointsUsed",
            b.discount_amount AS "discountAmount", b.booked_at AS "bookedAt",
            b.created_at AS "createdAt", b.updated_at AS "updatedAt",
@@ -180,7 +186,8 @@ export const bookEvent = async (req, res) => {
 
             const availablePoints = await client.query(
                 `SELECT p.id, p.amount - COALESCE((
-                    SELECT SUM(a.amount) FROM point_allocations a WHERE a.credit_id = p.id
+                    SELECT SUM(a.amount) FROM point_allocations a
+                    WHERE a.credit_id = p.id AND a.reversed_at IS NULL
                  ), 0)::int AS remaining
                  FROM point_transactions p
                  WHERE p.user_id = $1 AND p.expires_at > NOW()
@@ -260,15 +267,241 @@ export const bookEvent = async (req, res) => {
     }
 };
 
-/** Menyimpan bukti transfer lalu memulai batas waktu tiga hari bagi organizer. */
+/** Memulai unggah bukti pembayaran dalam potongan kecil agar kompatibel dengan batas serverless. */
+export const startPaymentProofUpload = async (req, res) => {
+    try {
+        const { uploadId, mimeType } = req.body;
+        const fileSize = Number(req.body.fileSize);
+        const totalChunks = Number(req.body.totalChunks);
+        if (!UUID_PATTERN.test(String(uploadId || '')) ||
+            !PAYMENT_PROOF_MIME_TYPES.includes(mimeType) ||
+            !Number.isInteger(fileSize) || fileSize < 1 || fileSize > 5_000_000 ||
+            !Number.isInteger(totalChunks) ||
+            totalChunks !== Math.ceil(fileSize / PAYMENT_PROOF_CHUNK_SIZE) ||
+            totalChunks > 10) {
+            return res.status(400).json({ message: 'File harus JPG, JPEG, PNG, WebP, atau PDF maksimal 5 MB.' });
+        }
+
+        await withTransaction(async (client) => {
+            const booking = await client.query(
+                `SELECT id FROM bookings
+                 WHERE id = $1 AND user_id = $2 AND status = 'waiting_for_payment'
+                   AND payment_deadline > NOW()
+                 FOR UPDATE`,
+                [req.params.id, req.user.id]
+            );
+            if (!booking.rowCount) return false;
+
+            await client.query(
+                `DELETE FROM payment_proof_uploads
+                 WHERE created_at < NOW() - INTERVAL '24 hours'`
+            );
+            await client.query(
+                `DELETE FROM payment_proof_uploads WHERE booking_id = $1 AND user_id = $2`,
+                [req.params.id, req.user.id]
+            );
+            await client.query(
+                `INSERT INTO payment_proof_uploads
+                    (upload_id, booking_id, user_id, mime_type, file_size, total_chunks)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [uploadId, req.params.id, req.user.id, mimeType, fileSize, totalChunks]
+            );
+            return true;
+        }).then((active) => {
+            if (!active) {
+                res.status(400).json({ message: 'Transaksi tidak ditemukan atau waktu unggah bukti sudah habis.' });
+                return;
+            }
+            res.status(201).json({ uploadId, chunkSize: PAYMENT_PROOF_CHUNK_SIZE });
+        });
+    } catch (error) {
+        console.error('Payment proof upload initialization failed:', error);
+        res.status(500).json({ message: 'Server gagal memulai unggah bukti pembayaran.' });
+    }
+};
+
+/** Menyimpan satu bagian Base64 yang ukurannya tetap di bawah batas payload serverless. */
+export const uploadPaymentProofChunk = async (req, res) => {
+    try {
+        const { uploadId, content } = req.body;
+        const chunkIndex = Number(req.body.chunkIndex);
+        if (!UUID_PATTERN.test(String(uploadId || '')) ||
+            !Number.isInteger(chunkIndex) ||
+            typeof content !== 'string' ||
+            content.length === 0 ||
+            content.length > Math.ceil(PAYMENT_PROOF_CHUNK_SIZE / 3) * 4 ||
+            !/^[A-Za-z0-9+/]+={0,2}$/.test(content)) {
+            return res.status(400).json({ message: 'Bagian file tidak valid. Silakan pilih ulang bukti pembayaran.' });
+        }
+
+        const upload = await pool.query(
+            `SELECT id, file_size, total_chunks
+             FROM payment_proof_uploads
+             WHERE upload_id = $1 AND booking_id = $2 AND user_id = $3
+               AND created_at >= NOW() - INTERVAL '24 hours'`,
+            [uploadId, req.params.id, req.user.id]
+        );
+        if (!upload.rowCount || chunkIndex < 0 || chunkIndex >= upload.rows[0].total_chunks) {
+            return res.status(404).json({ message: 'Sesi unggah tidak ditemukan atau sudah kedaluwarsa. Pilih file lagi.' });
+        }
+        const expectedByteLength = Math.min(
+            PAYMENT_PROOF_CHUNK_SIZE,
+            upload.rows[0].file_size - chunkIndex * PAYMENT_PROOF_CHUNK_SIZE
+        );
+        const decoded = Buffer.from(content, 'base64');
+        if (decoded.length !== expectedByteLength || decoded.toString('base64') !== content) {
+            return res.status(400).json({ message: 'Ukuran bagian file tidak sesuai. Silakan ulangi unggah bukti.' });
+        }
+
+        await pool.query(
+            `INSERT INTO payment_proof_upload_chunks (upload_id, chunk_index, content, byte_length)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (upload_id, chunk_index)
+             DO UPDATE SET content = EXCLUDED.content, byte_length = EXCLUDED.byte_length`,
+            [uploadId, chunkIndex, content, decoded.length]
+        );
+        res.json({ received: chunkIndex });
+    } catch (error) {
+        console.error('Payment proof chunk upload failed:', error);
+        res.status(500).json({ message: 'Server gagal menerima bagian bukti pembayaran.' });
+    }
+};
+
+/** Merangkai bagian file, menyimpan bukti pada transaksi, dan mengakhiri sesi unggah. */
+export const completePaymentProofUpload = async (req, res) => {
+    try {
+        const { uploadId } = req.body;
+        if (!UUID_PATTERN.test(String(uploadId || ''))) {
+            return res.status(400).json({ message: 'Sesi unggah bukti pembayaran tidak valid.' });
+        }
+
+        const result = await withTransaction(async (client) => {
+            const booking = await client.query(
+                `SELECT id FROM bookings
+                 WHERE id = $1 AND user_id = $2 AND status = 'waiting_for_payment'
+                   AND payment_deadline > NOW()
+                 FOR UPDATE`,
+                [req.params.id, req.user.id]
+            );
+            if (!booking.rowCount) return { error: 'Transaksi tidak ditemukan atau waktu unggah bukti sudah habis.' };
+
+            const upload = await client.query(
+                `SELECT mime_type, file_size, total_chunks
+                 FROM payment_proof_uploads
+                 WHERE upload_id = $1 AND booking_id = $2 AND user_id = $3
+                   AND created_at >= NOW() - INTERVAL '24 hours'
+                 FOR UPDATE`,
+                [uploadId, req.params.id, req.user.id]
+            );
+            if (!upload.rowCount) return { error: 'Sesi unggah tidak ditemukan atau sudah kedaluwarsa. Pilih file lagi.' };
+
+            const chunks = await client.query(
+                `SELECT chunk_index, content, byte_length
+                 FROM payment_proof_upload_chunks
+                 WHERE upload_id = $1 ORDER BY chunk_index`,
+                [uploadId]
+            );
+            const metadata = upload.rows[0];
+            const complete = chunks.rows.length === metadata.total_chunks &&
+                chunks.rows.every((chunk, index) => chunk.chunk_index === index) &&
+                chunks.rows.reduce((total, chunk) => total + chunk.byte_length, 0) === metadata.file_size;
+            if (!complete) return { error: 'Unggah bukti belum lengkap. Silakan coba unggah kembali.' };
+
+            const fileContent = Buffer.concat(chunks.rows.map((chunk) => Buffer.from(chunk.content, 'base64')));
+            if (fileContent.length !== metadata.file_size) {
+                return { error: 'Ukuran bukti pembayaran tidak sesuai. Silakan unggah ulang.' };
+            }
+            const paymentProof = `data:${metadata.mime_type};base64,${fileContent.toString('base64')}`;
+            await client.query(
+                `UPDATE bookings
+                 SET payment_proof = $1, status = 'waiting_for_admin_confirmation',
+                     organizer_deadline = NOW() + INTERVAL '3 days', updated_at = NOW()
+                 WHERE id = $2 AND user_id = $3`,
+                [paymentProof, req.params.id, req.user.id]
+            );
+            await client.query('DELETE FROM payment_proof_uploads WHERE upload_id = $1', [uploadId]);
+            return { success: true };
+        });
+
+        if (result.error) return res.status(400).json({ message: result.error });
+        res.json({ message: 'Bukti pembayaran diterima. Menunggu pemeriksaan organizer.' });
+    } catch (error) {
+        console.error('Payment proof upload completion failed:', error);
+        res.status(500).json({ message: 'Server gagal menyelesaikan unggah bukti pembayaran.' });
+    }
+};
+
+/** Menghapus sesi unggah yang dibatalkan atau gagal. */
+export const cancelPaymentProofUpload = async (req, res) => {
+    try {
+        if (!UUID_PATTERN.test(String(req.params.uploadId || ''))) {
+            return res.status(400).json({ message: 'Sesi unggah bukti pembayaran tidak valid.' });
+        }
+        await pool.query(
+            `DELETE FROM payment_proof_uploads
+             WHERE upload_id = $1 AND booking_id = $2 AND user_id = $3`,
+            [req.params.uploadId, req.params.id, req.user.id]
+        );
+        res.status(204).end();
+    } catch (error) {
+        console.error('Payment proof upload cancellation failed:', error);
+        res.status(500).json({ message: 'Server gagal membersihkan sesi unggah bukti.' });
+    }
+};
+
+/** Mengirim satu bagian bukti agar file besar tidak melampaui batas respons serverless. */
+export const getPaymentProofChunk = async (req, res) => {
+    try {
+        const chunkIndex = Number(req.query.index || 0);
+        if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+            return res.status(400).json({ message: 'Bagian bukti pembayaran tidak valid.' });
+        }
+
+        const proofResult = await pool.query(
+            `WITH stored_proof AS (
+                SELECT b.payment_proof,
+                       POSITION(';base64,' IN b.payment_proof) AS separator
+                FROM bookings b
+                JOIN events e ON e.id = b.event_id
+                WHERE b.id = $1 AND b.payment_proof <> ''
+                  AND ($2 IN ('admin', 'it') OR e.created_by = $3)
+            )
+            SELECT SUBSTRING(payment_proof FROM 1 FOR separator + 7) AS prefix,
+                   SUBSTRING(payment_proof FROM separator + 8 + $4 * $5 FOR $5) AS content,
+                   LENGTH(SUBSTRING(payment_proof FROM separator + 8))::int AS "contentLength"
+            FROM stored_proof`,
+            [req.params.id, req.user.role, req.user.id, chunkIndex, PAYMENT_PROOF_RESPONSE_CHUNK_SIZE]
+        );
+        if (!proofResult.rowCount) return res.status(404).json({ message: 'Bukti pembayaran tidak ditemukan.' });
+
+        const { prefix, content, contentLength } = proofResult.rows[0];
+        if (!prefix.startsWith('data:') || !prefix.endsWith(';base64,')) {
+            return res.status(500).json({ message: 'Format bukti pembayaran pada transaksi tidak valid.' });
+        }
+        const totalChunks = Math.ceil(contentLength / PAYMENT_PROOF_RESPONSE_CHUNK_SIZE);
+        if (chunkIndex >= totalChunks) return res.status(404).json({ message: 'Bagian bukti pembayaran tidak ditemukan.' });
+
+        res.json({
+            prefix,
+            content,
+            chunkIndex,
+            totalChunks
+        });
+    } catch (error) {
+        console.error('Payment proof chunk lookup failed:', error);
+        res.status(500).json({ message: 'Server gagal memuat bagian bukti pembayaran.' });
+    }
+};
+
+/** Menyimpan bukti transfer dari klien lama lalu memulai batas waktu organizer. */
 export const uploadPaymentProof = async (req, res) => {
     try {
         const proof = String(req.body.paymentProof || '');
         if (!/^data:(image\/(jpeg|png|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/.test(proof)) {
             return res.status(400).json({ message: 'Pilih bukti berupa gambar PNG/JPG/WebP atau PDF.' });
         }
-        if (proof.length > 4_000_000) {
-            return res.status(413).json({ message: 'Bukti pembayaran terlalu besar setelah diproses. Kompres gambar atau pilih PDF maksimal 2,9 MB.' });
+        if (proof.length > 7_000_000) {
+            return res.status(413).json({ message: 'Bukti pembayaran maksimal 5 MB.' });
         }
 
         const updated = await pool.query(
@@ -423,7 +656,10 @@ const releaseBookingResources = async (client, booking) => {
             [booking.quantity, booking.event_id]
         );
     }
-    await client.query('DELETE FROM point_allocations WHERE booking_id = $1', [booking.id]);
+    await client.query(
+        'UPDATE point_allocations SET reversed_at = NOW() WHERE booking_id = $1 AND reversed_at IS NULL',
+        [booking.id]
+    );
     if (booking.coupon_id) await client.query('UPDATE coupons SET used_at = NULL WHERE id = $1', [booking.coupon_id]);
     if (booking.voucher_id) {
         await client.query(

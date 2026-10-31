@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import type { Request, Response } from 'express';
 import app from './app';
-import { pool } from './db';
+import { initializeDatabase } from './db';
 
 const allowedOrigins = new Set([
     'https://eventhub-purwadhika.vercel.app',
@@ -42,7 +42,7 @@ const initialize = (): Promise<void> => {
     }
 
     if (!initialization) {
-        initialization = pool.query('SELECT 1')
+        initialization = initializeDatabase()
             .then(() => undefined)
             .catch((error: unknown) => {
                 initialization = undefined;

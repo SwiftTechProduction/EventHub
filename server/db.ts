@@ -158,18 +158,47 @@ export const initializeDatabase = async () => {
         CREATE TABLE IF NOT EXISTS point_transactions (
             id BIGSERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            referred_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
             amount INTEGER NOT NULL CHECK (amount > 0),
             expires_at TIMESTAMPTZ NOT NULL,
             reason TEXT NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        ALTER TABLE point_transactions ADD COLUMN IF NOT EXISTS referred_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
+        UPDATE point_transactions p
+        SET referred_user_id = u.id
+        FROM users u
+        WHERE p.referred_user_id IS NULL
+          AND p.reason LIKE 'Referral akun %'
+          AND LOWER(u.email) = LOWER(SUBSTRING(p.reason FROM LENGTH('Referral akun ') + 1));
 
         CREATE TABLE IF NOT EXISTS point_allocations (
             id BIGSERIAL PRIMARY KEY,
             credit_id BIGINT NOT NULL REFERENCES point_transactions(id) ON DELETE CASCADE,
             booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
             amount INTEGER NOT NULL CHECK (amount > 0),
+            reversed_at TIMESTAMPTZ,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        ALTER TABLE point_allocations ADD COLUMN IF NOT EXISTS reversed_at TIMESTAMPTZ;
+
+        CREATE TABLE IF NOT EXISTS payment_proof_uploads (
+            upload_id UUID PRIMARY KEY,
+            booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+            user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            mime_type TEXT NOT NULL CHECK (mime_type IN ('image/jpeg', 'image/png', 'image/webp', 'application/pdf')),
+            file_size INTEGER NOT NULL CHECK (file_size > 0 AND file_size <= 5000000),
+            total_chunks INTEGER NOT NULL CHECK (total_chunks > 0 AND total_chunks <= 10),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (booking_id, user_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS payment_proof_upload_chunks (
+            upload_id UUID NOT NULL REFERENCES payment_proof_uploads(upload_id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL CHECK (chunk_index >= 0),
+            content TEXT NOT NULL,
+            byte_length INTEGER NOT NULL CHECK (byte_length > 0 AND byte_length <= 524288),
+            PRIMARY KEY (upload_id, chunk_index)
         );
 
         CREATE TABLE IF NOT EXISTS event_reviews (
@@ -201,6 +230,7 @@ export const initializeDatabase = async () => {
         CREATE INDEX IF NOT EXISTS events_category_idx ON events(category);
         CREATE INDEX IF NOT EXISTS events_location_idx ON events(location);
         CREATE INDEX IF NOT EXISTS point_transactions_user_expiry_idx ON point_transactions(user_id, expires_at);
+        CREATE INDEX IF NOT EXISTS point_transactions_referred_user_idx ON point_transactions(referred_user_id);
         CREATE INDEX IF NOT EXISTS event_vouchers_event_idx ON event_vouchers(event_id, starts_at, ends_at);
         CREATE INDEX IF NOT EXISTS event_reviews_event_idx ON event_reviews(event_id, created_at DESC);
     `);

@@ -98,9 +98,9 @@ export const register = async (req, res) => {
 
             if (referral?.rows[0]) {
                 await client.query(
-                    `INSERT INTO point_transactions (user_id, amount, expires_at, reason)
-                     VALUES ($1, 10000, NOW() + INTERVAL '3 months', $2)`,
-                    [referral.rows[0].id, `Referral akun ${user.email}`]
+                    `INSERT INTO point_transactions (user_id, referred_user_id, amount, expires_at, reason)
+                     VALUES ($1, $2, 10000, NOW() + INTERVAL '3 months', $3)`,
+                    [referral.rows[0].id, user._id, 'Bonus referral pendaftaran akun']
                 );
                 await client.query(
                     `INSERT INTO coupons (user_id, code, discount_type, discount_value, starts_at, expires_at)
@@ -241,10 +241,20 @@ export const getProfile = async (req, res) => {
                 COALESCE((
                     SELECT SUM(p.amount - COALESCE((
                         SELECT SUM(a.amount) FROM point_allocations a WHERE a.credit_id = p.id
+                          AND a.reversed_at IS NULL
                     ), 0))
                     FROM point_transactions p
                     WHERE p.user_id = users.id AND p.expires_at > NOW()
-                ), 0)::int AS points
+                ), 0)::int AS points,
+                (
+                    SELECT MIN(p.expires_at)
+                    FROM point_transactions p
+                    WHERE p.user_id = users.id AND p.expires_at > NOW()
+                      AND p.amount > COALESCE((
+                          SELECT SUM(a.amount) FROM point_allocations a WHERE a.credit_id = p.id
+                            AND a.reversed_at IS NULL
+                      ), 0)
+                ) AS "nextPointsExpiration"
              FROM users WHERE id = $1`,
             [req.user.id]
         );
@@ -258,6 +268,85 @@ export const getProfile = async (req, res) => {
     } catch (error) {
         console.error('Profile lookup failed:', error);
         res.status(500).json({ message: 'Server gagal memuat profil.' });
+    }
+};
+
+/** Mengembalikan saldo aktif dan statement poin beserta pemakaian dan poin kedaluwarsa. */
+export const getPointStatement = async (req, res) => {
+    try {
+        const [summary, statement] = await Promise.all([
+            pool.query(
+                `WITH credits AS (
+                    SELECT p.id, p.amount, p.expires_at,
+                           p.amount - COALESCE(SUM(a.amount), 0)::int AS remaining
+                    FROM point_transactions p
+                    LEFT JOIN point_allocations a ON a.credit_id = p.id AND a.reversed_at IS NULL
+                    WHERE p.user_id = $1
+                    GROUP BY p.id
+                )
+                SELECT COALESCE(SUM(remaining) FILTER (WHERE expires_at > NOW()), 0)::int AS balance,
+                       COALESCE(SUM(remaining) FILTER (WHERE expires_at <= NOW()), 0)::int AS "expiredPoints",
+                       COALESCE(SUM(remaining) FILTER (
+                           WHERE expires_at > NOW() AND expires_at <= NOW() + INTERVAL '30 days'
+                       ), 0)::int AS "expiringPoints",
+                       MIN(expires_at) FILTER (WHERE expires_at > NOW() AND remaining > 0) AS "nextExpiration"
+                FROM credits`,
+                [req.user.id]
+            ),
+            pool.query(
+                `WITH credits AS (
+                    SELECT p.id, p.user_id, p.amount, p.expires_at, p.reason, p.created_at,
+                           p.referred_user_id,
+                           p.amount - COALESCE(SUM(a.amount), 0)::int AS remaining
+                    FROM point_transactions p
+                    LEFT JOIN point_allocations a ON a.credit_id = p.id AND a.reversed_at IS NULL
+                    WHERE p.user_id = $1
+                    GROUP BY p.id
+                ),
+                entries AS (
+                    SELECT 'credit'::text AS type, c.id::text AS id, c.amount AS amount,
+                           c.created_at AS "createdAt", c.expires_at AS "expiresAt",
+                           CASE WHEN c.referred_user_id IS NOT NULL
+                                THEN 'Bonus referral pendaftaran akun'
+                                ELSE c.reason
+                           END AS reason,
+                           referred.name AS "referredUserName", NULL::text AS event
+                    FROM credits c
+                    LEFT JOIN users referred ON referred.id = c.referred_user_id
+                    UNION ALL
+                    SELECT 'redemption', b.id::text, -SUM(a.amount)::int, MIN(a.created_at),
+                           NULL::timestamptz, 'Poin digunakan untuk pemesanan', NULL::text, e.title
+                    FROM point_allocations a
+                    JOIN bookings b ON b.id = a.booking_id
+                    LEFT JOIN events e ON e.id = b.event_id
+                    WHERE b.user_id = $1 AND a.reversed_at IS NULL
+                    GROUP BY b.id, e.title
+                    UNION ALL
+                    SELECT 'return', b.id::text, SUM(a.amount)::int, MAX(a.reversed_at),
+                           NULL::timestamptz, 'Poin dikembalikan dari pemesanan', NULL::text, e.title
+                    FROM point_allocations a
+                    JOIN bookings b ON b.id = a.booking_id
+                    LEFT JOIN events e ON e.id = b.event_id
+                    WHERE b.user_id = $1 AND a.reversed_at IS NOT NULL
+                    GROUP BY b.id, e.title
+                    UNION ALL
+                    SELECT 'expiration', c.id::text, -c.remaining, c.expires_at,
+                           c.expires_at, 'Sisa poin kedaluwarsa', NULL::text, NULL::text
+                    FROM credits c
+                    WHERE c.expires_at <= NOW() AND c.remaining > 0
+                )
+                SELECT type, id, amount, "createdAt", "expiresAt", reason,
+                       "referredUserName", event
+                FROM entries
+                ORDER BY "createdAt" DESC, id DESC
+                `,
+                [req.user.id]
+            )
+        ]);
+        res.json({ ...summary.rows[0], statement: statement.rows });
+    } catch (error) {
+        console.error('Point statement lookup failed:', error);
+        res.status(500).json({ message: 'Server gagal memuat riwayat poin.' });
     }
 };
 

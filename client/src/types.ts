@@ -67,6 +67,7 @@ export interface Booking {
     quantity: number;
     ticketType: string;
     paymentProof?: string;
+    hasPaymentProof?: boolean;
     paymentDeadline?: string | null;
     organizerDeadline?: string | null;
     pointsUsed?: number;
@@ -93,6 +94,7 @@ export interface EventForm {
 /** Data poin dan kupon yang ditampilkan pada profil pelanggan. */
 export interface UserProfile extends User {
     points: number;
+    nextPointsExpiration: string | null;
     coupons: {
         id: number | string;
         code: string;

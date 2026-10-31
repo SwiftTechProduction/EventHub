@@ -26,7 +26,10 @@ export const expireStaleBookings = async (): Promise<number> => withTransaction(
                 [booking.quantity, booking.event_id]
             );
         }
-        await client.query('DELETE FROM point_allocations WHERE booking_id = $1', [booking.id]);
+        await client.query(
+            'UPDATE point_allocations SET reversed_at = NOW() WHERE booking_id = $1 AND reversed_at IS NULL',
+            [booking.id]
+        );
         if (booking.coupon_id) {
             await client.query('UPDATE coupons SET used_at = NULL WHERE id = $1', [booking.coupon_id]);
         }

@@ -62,6 +62,8 @@ const AdminDashboard = () => {
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
+    const [proofViewer, setProofViewer] = useState<{ url: string; mimeType: string } | null>(null);
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [error, setError] = useState('');
@@ -86,6 +88,10 @@ const AdminDashboard = () => {
         });
         return () => window.cancelAnimationFrame(frame);
     }, [showEventForm, editingEventId]);
+
+    useEffect(() => () => {
+        if (proofViewer) URL.revokeObjectURL(proofViewer.url);
+    }, [proofViewer]);
 
     /** Memuat event, transaksi, dan statistik sesuai peran organizer. */
     const loadDashboard = async () => {
@@ -238,6 +244,37 @@ const AdminDashboard = () => {
             await loadDashboard();
         } catch (caught) {
             setError(caught.response?.data?.message || 'Keputusan transaksi belum dapat disimpan.');
+        }
+    };
+
+    /** Mengambil bukti per bagian dan menampilkannya tanpa respons API besar. */
+    const showPaymentProof = async (booking: Booking) => {
+        setProofLoadingId(String(booking._id));
+        setError('');
+        try {
+            const first = await api.get(`/bookings/${booking._id}/payment-proof/chunk?index=0`);
+            const { prefix, totalChunks } = first.data;
+            const encodedChunks = [first.data.content];
+            for (let index = 1; index < totalChunks; index += 1) {
+                const { data } = await api.get(`/bookings/${booking._id}/payment-proof/chunk?index=${index}`);
+                if (data.prefix !== prefix || data.totalChunks !== totalChunks || data.chunkIndex !== index) {
+                    throw new Error('Bukti pembayaran berubah saat sedang dimuat. Silakan coba kembali.');
+                }
+                encodedChunks.push(data.content);
+            }
+
+            const binary = atob(encodedChunks.join(''));
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) {
+                bytes[index] = binary.charCodeAt(index);
+            }
+            const mimeType = prefix.slice('data:'.length, prefix.indexOf(';base64,'));
+            const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+            setProofViewer({ url, mimeType });
+        } catch (caught) {
+            setError(caught.response?.data?.message || caught.message || 'Bukti pembayaran belum dapat dibuka.');
+        } finally {
+            setProofLoadingId(null);
         }
     };
 
@@ -557,10 +594,10 @@ const AdminDashboard = () => {
                                         <span className="text-slate-500">{new Date(booking.bookedAt).toLocaleString('id-ID')}</span>
                                         <strong>{formatRupiah(booking.amount)}</strong>
                                     </div>
-                                    {booking.paymentProof && (
-                                        <a href={booking.paymentProof} download={`bukti-${booking._id}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-sm font-bold text-violet-700 hover:underline">
-                                            Lihat bukti pembayaran
-                                        </a>
+                                    {booking.hasPaymentProof && (
+                                        <button type="button" onClick={() => void showPaymentProof(booking)} disabled={proofLoadingId !== null} className="mt-3 inline-flex text-sm font-bold text-violet-700 hover:underline disabled:opacity-50">
+                                            {proofLoadingId === String(booking._id) ? 'Memuat bukti…' : 'Lihat bukti pembayaran'}
+                                        </button>
                                     )}
                                     {booking.status === 'waiting_for_admin_confirmation' && (
                                         <div className="mt-4 flex flex-wrap gap-2">
@@ -589,6 +626,24 @@ const AdminDashboard = () => {
                         <Field label="Jumlah pemakaian" type="number" value={voucherForm.maxUses} onChange={(value) => setVoucherForm({ ...voucherForm, maxUses: value })} required />
                         <div className="flex gap-3"><button className="button-primary flex-1">Buat voucher</button><button type="button" className="button-secondary" onClick={() => setVoucherEvent(null)}>Batal</button></div>
                     </form>
+                </div>
+            )}
+            {proofViewer && (
+                <div className="modal-backdrop" role="presentation" onClick={() => setProofViewer(null)}>
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Bukti pembayaran"
+                        className="surface-card modal-panel max-h-[90vh] overflow-auto p-4"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="mb-3 flex justify-end">
+                            <button type="button" className="button-secondary" onClick={() => setProofViewer(null)}>Tutup</button>
+                        </div>
+                        {proofViewer.mimeType === 'application/pdf'
+                            ? <iframe title="Bukti pembayaran PDF" src={proofViewer.url} className="h-[75vh] w-full" />
+                            : <img src={proofViewer.url} alt="Bukti pembayaran" className="mx-auto max-h-[75vh] max-w-full object-contain" />}
+                    </section>
                 </div>
             )}
         </div>

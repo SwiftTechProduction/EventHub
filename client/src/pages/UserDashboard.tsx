@@ -7,32 +7,27 @@ import type { Booking, UserProfile } from '../types';
 import { formatRupiah } from '../utils/currency';
 import { formatEventSchedule } from '../utils/eventSchedule';
 
+const PAYMENT_PROOF_CHUNK_SIZE = 524_288;
 const MAX_PROOF_FILE_SIZE = 5_000_000;
-const MAX_PROOF_DATA_URL_SIZE = 4_000_000;
-const MAX_PDF_FILE_SIZE = 2_900_000;
 
-const loadImage = (file: File): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
-    const image = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    image.onload = () => {
-        URL.revokeObjectURL(objectUrl);
-        resolve(image);
-    };
-    image.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        reject(new Error('Gambar bukti pembayaran tidak dapat dibaca.'));
-    };
-    image.src = objectUrl;
-});
+interface PointStatementEntry {
+    id: string;
+    type: 'credit' | 'redemption' | 'return' | 'expiration';
+    amount: number;
+    createdAt: string;
+    expiresAt: string | null;
+    reason: string;
+    referredUserName: string | null;
+    event: string | null;
+}
 
-const canvasToJpeg = (canvas: HTMLCanvasElement, quality: number): Promise<Blob> =>
-    new Promise((resolve, reject) => {
-        canvas.toBlob(
-            (blob) => blob ? resolve(blob) : reject(new Error('Gambar bukti pembayaran gagal diproses.')),
-            'image/jpeg',
-            quality
-        );
-    });
+interface PointStatement {
+    balance: number;
+    expiredPoints: number;
+    expiringPoints: number;
+    nextExpiration: string | null;
+    statement: PointStatementEntry[];
+}
 
 const readAsDataUrl = (file: Blob): Promise<string> => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -43,7 +38,7 @@ const readAsDataUrl = (file: Blob): Promise<string> => new Promise((resolve, rej
     reader.readAsDataURL(file);
 });
 
-const preparePaymentProof = async (file: File): Promise<string> => {
+const getPaymentProofMimeType = (file: File): string => {
     const extension = file.name.split('.').pop()?.toLowerCase();
     const declaredType = file.type.toLowerCase();
     const fallbackType = extension === 'pdf'
@@ -55,62 +50,9 @@ const preparePaymentProof = async (file: File): Promise<string> => {
                 : extension === 'webp'
                     ? 'image/webp'
                     : '';
-    const fileType = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'application/pdf'].includes(declaredType)
+    return ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'application/pdf'].includes(declaredType)
         ? declaredType
         : fallbackType;
-
-    if (fileType === 'application/pdf') {
-        if (file.size > MAX_PDF_FILE_SIZE) {
-            throw new Error('Ukuran bukti PDF maksimal 2,9 MB.');
-        }
-        return readAsDataUrl(new Blob([file], { type: 'application/pdf' }));
-    }
-
-    if (!['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp'].includes(fileType)) {
-        throw new Error('Format bukti harus JPG, PNG, WebP, atau PDF.');
-    }
-    if (file.size > MAX_PROOF_FILE_SIZE) {
-        throw new Error('Ukuran gambar bukti maksimal 5 MB.');
-    }
-
-    let imageBlob: Blob = file;
-    if (file.size > 2_800_000) {
-        const image = await loadImage(file);
-        const canvas = document.createElement('canvas');
-        const scale = Math.min(1, 2400 / Math.max(image.naturalWidth, image.naturalHeight));
-        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Browser tidak dapat memproses gambar bukti.');
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-        imageBlob = await canvasToJpeg(canvas, 0.84);
-        for (const quality of [0.76, 0.68]) {
-            if (imageBlob.size <= 2_800_000) break;
-            imageBlob = await canvasToJpeg(canvas, quality);
-        }
-        while (imageBlob.size > 2_800_000 && Math.max(canvas.width, canvas.height) > 900) {
-            canvas.width = Math.round(canvas.width * 0.8);
-            canvas.height = Math.round(canvas.height * 0.8);
-            const resizedContext = canvas.getContext('2d');
-            if (!resizedContext) throw new Error('Browser tidak dapat memproses gambar bukti.');
-            resizedContext.drawImage(image, 0, 0, canvas.width, canvas.height);
-            imageBlob = await canvasToJpeg(canvas, 0.68);
-        }
-        if (imageBlob.size > 2_800_000) {
-            throw new Error('Gambar terlalu besar untuk diproses. Pilih gambar dengan ukuran lebih kecil.');
-        }
-    }
-
-    const outputMimeType = imageBlob === file
-        ? (fileType === 'image/jpg' || fileType === 'image/pjpeg' ? 'image/jpeg' : fileType)
-        : 'image/jpeg';
-    const dataUrl = await readAsDataUrl(new Blob([imageBlob], { type: outputMimeType }));
-    const normalizedDataUrl = dataUrl.replace(/^data:image\/(?:jpg|pjpeg);/i, 'data:image/jpeg;');
-    if (normalizedDataUrl.length > MAX_PROOF_DATA_URL_SIZE) {
-        throw new Error('Bukti pembayaran terlalu besar setelah diproses. Pilih file yang lebih kecil.');
-    }
-    return normalizedDataUrl;
 };
 
 /** Menampilkan transaksi, poin referral, kupon, dan pengaturan profil pelanggan. */
@@ -125,6 +67,10 @@ const UserDashboard = () => {
     const [newPassword, setNewPassword] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [uploadingProofId, setUploadingProofId] = useState<string | null>(null);
+    const [pointStatement, setPointStatement] = useState<PointStatement | null>(null);
+    const [showPointHistory, setShowPointHistory] = useState(false);
+    const [pointHistoryLoading, setPointHistoryLoading] = useState(false);
     const [notice, setNotice] = useState('');
     const [error, setError] = useState('');
 
@@ -139,6 +85,22 @@ const UserDashboard = () => {
         }
         void loadDashboard();
     }, [user, navigate]);
+
+    useEffect(() => {
+        if (!profile?.nextPointsExpiration) return;
+        const expirationTime = new Date(profile.nextPointsExpiration).getTime();
+        let expirationTimer = 0;
+        const refreshAtExpiration = () => {
+            const remaining = expirationTime - Date.now();
+            if (remaining <= 0) {
+                void loadDashboard();
+                return;
+            }
+            expirationTimer = window.setTimeout(refreshAtExpiration, Math.min(remaining + 1000, 2_000_000_000));
+        };
+        refreshAtExpiration();
+        return () => window.clearTimeout(expirationTimer);
+    }, [profile?.nextPointsExpiration]);
 
     /** Memuat data profil dan transaksi agar saldo serta status terbaru terlihat. */
     const loadDashboard = async () => {
@@ -201,15 +163,71 @@ const UserDashboard = () => {
     const uploadProof = async (bookingId: number | string, file?: File) => {
         if (!file) return;
         setError('');
+        setUploadingProofId(String(bookingId));
+        let uploadId = '';
         try {
-            const paymentProof = await preparePaymentProof(file);
-            await api.post(`/bookings/${bookingId}/payment-proof`, { paymentProof });
+            const mimeType = getPaymentProofMimeType(file);
+            if (!['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'application/pdf'].includes(mimeType)) {
+                throw new Error('Format bukti harus JPG, JPEG, PNG, WebP, atau PDF.');
+            }
+            if (file.size < 1 || file.size > MAX_PROOF_FILE_SIZE) {
+                throw new Error('Ukuran bukti pembayaran harus lebih dari 0 dan maksimal 5 MB.');
+            }
+            const normalizedMimeType = ['image/jpg', 'image/pjpeg'].includes(mimeType) ? 'image/jpeg' : mimeType;
+            const totalChunks = Math.ceil(file.size / PAYMENT_PROOF_CHUNK_SIZE);
+            uploadId = crypto.randomUUID();
+            await api.post(`/bookings/${bookingId}/payment-proof/start`, {
+                uploadId,
+                mimeType: normalizedMimeType,
+                fileSize: file.size,
+                totalChunks
+            });
+
+            for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+                const start = chunkIndex * PAYMENT_PROOF_CHUNK_SIZE;
+                const chunk = file.slice(start, Math.min(start + PAYMENT_PROOF_CHUNK_SIZE, file.size));
+                const dataUrl = await readAsDataUrl(chunk);
+                const content = dataUrl.slice(dataUrl.indexOf(',') + 1);
+                await api.post(`/bookings/${bookingId}/payment-proof/chunk`, {
+                    uploadId,
+                    chunkIndex,
+                    content
+                });
+            }
+            await api.post(`/bookings/${bookingId}/payment-proof/complete`, { uploadId });
             setNotice('Bukti diterima. Organizer akan memeriksa transaksi Anda.');
             await loadDashboard();
         } catch (caught) {
-            setError(caught.response?.status === 413
-                ? 'File bukti terlalu besar untuk dikirim. Gambar dikompres otomatis; coba file lebih kecil atau PDF maksimal 2,9 MB.'
-                : caught.response?.data?.message || caught.message || 'Bukti pembayaran belum dapat diunggah.');
+            if (uploadId) {
+                try {
+                    await api.delete(`/bookings/${bookingId}/payment-proof/upload/${uploadId}`);
+                } catch (cleanupError) {
+                    console.warn('Sesi unggah bukti pembayaran akan dibersihkan otomatis.', cleanupError);
+                }
+            }
+            setError(caught.response?.data?.message ||
+                (caught.message === 'Network Error'
+                    ? 'Koneksi unggah terputus. Periksa koneksi ke server lalu coba unggah kembali.'
+                    : caught.message || 'Bukti pembayaran belum dapat diunggah.'));
+        } finally {
+            setUploadingProofId(null);
+        }
+    };
+
+    const showPoints = async () => {
+        setShowPointHistory(true);
+        setPointHistoryLoading(true);
+        try {
+            const { data } = await api.get('/auth/points');
+            setPointStatement(data);
+            setProfile((current) => current
+                ? { ...current, points: data.balance, nextPointsExpiration: data.nextExpiration }
+                : current);
+        } catch (caught) {
+            setError(caught.response?.data?.message || 'Riwayat poin belum dapat dimuat.');
+            setShowPointHistory(false);
+        } finally {
+            setPointHistoryLoading(false);
         }
     };
 
@@ -251,7 +269,10 @@ const UserDashboard = () => {
                     <span className="metric-icon"><FaGift /></span>
                     <p className="metric-label">Poin tersedia</p>
                     <strong className="metric-value">{(profile?.points || 0).toLocaleString('id-ID')}</strong>
-                    <p className="text-xs text-slate-500">Setiap poin bernilai Rp1 dan berakhir 3 bulan setelah diperoleh.</p>
+                    <p className="text-xs text-slate-500">Setiap poin bernilai Rp1 dan otomatis kedaluwarsa 3 bulan setelah diperoleh.</p>
+                    <button type="button" className="mt-3 text-sm font-bold text-violet-700 hover:underline" onClick={() => void showPoints()}>
+                        Lihat detail poin
+                    </button>
                 </article>
                 <article className="metric-card">
                     <span className="metric-icon"><FaTicketAlt /></span>
@@ -313,10 +334,13 @@ const UserDashboard = () => {
                                                 </p>
                                                 <p className="mt-1 text-xs text-amber-700">Transaksi akan expired otomatis saat hitung mundur habis.</p>
                                                 <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg bg-amber-900 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800">
-                                                    Pilih bukti pembayaran
-                                                    <input className="sr-only" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => { void uploadProof(booking._id, e.target.files?.[0]); e.currentTarget.value = ''; }} />
+                                                    {uploadingProofId === String(booking._id) ? 'Mengunggah bukti…' : 'Pilih bukti pembayaran'}
+                                                    <input className="sr-only" type="file" disabled={uploadingProofId !== null} accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => { void uploadProof(booking._id, e.target.files?.[0]); e.currentTarget.value = ''; }} />
                                                 </label>
-                                                <p className="mt-2 text-xs text-amber-700">Gambar JPG/PNG/WebP maks. 5 MB (dikompres otomatis); PDF maks. 2,9 MB.</p>
+                                                <p className="mt-2 text-xs text-amber-700">JPG, JPEG, PNG, WebP, atau PDF maksimal 5 MB.</p>
+                                                {uploadingProofId === String(booking._id) && (
+                                                    <p role="status" className="mt-2 text-xs font-semibold text-amber-900">Mengirim file dalam beberapa bagian, mohon tunggu…</p>
+                                                )}
                                             </div>
                                         )}
                                         {booking.status === 'waiting_for_admin_confirmation' && (
@@ -370,6 +394,80 @@ const UserDashboard = () => {
                     </article>
                 </aside>
             </div>
+            {showPointHistory && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="point-history-title"
+                        className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+                    >
+                        <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5 md:p-7">
+                            <div>
+                                <span className="eyebrow">RIWAYAT SALDO</span>
+                                <h2 id="point-history-title" className="mt-1 text-2xl font-extrabold text-slate-900">Statement poin</h2>
+                            </div>
+                            <button type="button" className="button-secondary" onClick={() => setShowPointHistory(false)}>Tutup</button>
+                        </div>
+                        {pointHistoryLoading ? (
+                            <p className="p-8 text-center text-sm text-slate-500">Memuat riwayat poin…</p>
+                        ) : pointStatement ? (
+                            <div className="max-h-[calc(90vh-100px)] overflow-y-auto p-5 md:p-7">
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <div className="rounded-2xl bg-violet-50 p-4">
+                                        <span className="text-xs font-semibold text-violet-700">Saldo aktif</span>
+                                        <strong className="mt-1 block text-xl text-violet-950">{pointStatement.balance.toLocaleString('id-ID')} poin</strong>
+                                    </div>
+                                    <div className="rounded-2xl bg-amber-50 p-4">
+                                        <span className="text-xs font-semibold text-amber-700">Kedaluwarsa 30 hari ke depan</span>
+                                        <strong className="mt-1 block text-xl text-amber-950">{pointStatement.expiringPoints.toLocaleString('id-ID')} poin</strong>
+                                        {pointStatement.nextExpiration && (
+                                            <span className="mt-1 block text-xs text-amber-800">
+                                                Berikutnya {new Date(pointStatement.nextExpiration).toLocaleString('id-ID')}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="rounded-2xl bg-rose-50 p-4">
+                                        <span className="text-xs font-semibold text-rose-700">Total poin hangus</span>
+                                        <strong className="mt-1 block text-xl text-rose-950">{pointStatement.expiredPoints.toLocaleString('id-ID')} poin</strong>
+                                    </div>
+                                </div>
+                                <h3 className="mb-3 mt-7 font-bold text-slate-900">Riwayat masuk dan keluar</h3>
+                                {pointStatement.statement.length === 0 ? (
+                                    <p className="rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">Belum ada riwayat poin.</p>
+                                ) : (
+                                    <ol className="space-y-3">
+                                        {pointStatement.statement.map((entry) => (
+                                            <li key={`${entry.type}-${entry.id}`} className="rounded-2xl border border-slate-100 p-4">
+                                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                                    <div>
+                                                        <strong className="text-sm text-slate-900">
+                                                            {entry.type === 'credit' ? 'Poin masuk' : entry.type === 'redemption' ? 'Poin digunakan' : entry.type === 'return' ? 'Poin dikembalikan' : 'Poin hangus'}
+                                                        </strong>
+                                                        <p className="mt-1 text-sm text-slate-600">{entry.reason}{entry.event ? ` · ${entry.event}` : ''}</p>
+                                                        {entry.referredUserName && (
+                                                            <p className="mt-1 text-sm text-violet-700">Referral digunakan oleh: {entry.referredUserName}</p>
+                                                        )}
+                                                    </div>
+                                                    <strong className={`text-sm ${entry.amount > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                        {entry.amount > 0 ? '+' : ''}{entry.amount.toLocaleString('id-ID')} poin
+                                                    </strong>
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
+                                                    <span>{new Date(entry.createdAt).toLocaleString('id-ID')}</span>
+                                                    {entry.expiresAt && (
+                                                        <span>{entry.type === 'expiration' ? 'Kedaluwarsa' : 'Berlaku sampai'} {new Date(entry.expiresAt).toLocaleString('id-ID')}</span>
+                                                    )}
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+                            </div>
+                        ) : null}
+                    </section>
+                </div>
+            )}
         </div>
     );
 };
