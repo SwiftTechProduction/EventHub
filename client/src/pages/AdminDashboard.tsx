@@ -95,7 +95,7 @@ const AdminDashboard = () => {
     }, [proofViewer]);
 
     /** Memuat event, transaksi, dan statistik sesuai peran organizer. */
-    const loadDashboard = async () => {
+    const loadDashboard = async (): Promise<boolean> => {
         setLoading(true);
         try {
             const [eventsResponse, bookingsResponse, statsResponse, usersResponse] = await Promise.all([
@@ -108,8 +108,11 @@ const AdminDashboard = () => {
             setBookings(bookingsResponse.data);
             setStats(statsResponse.data);
             setManagedUsers(usersResponse.data);
+            return true;
         } catch (caught) {
             setError(caught.response?.data?.message || 'Dashboard organizer belum dapat dimuat.');
+            setNotice('');
+            return false;
         } finally {
             setLoading(false);
         }
@@ -237,17 +240,27 @@ const AdminDashboard = () => {
             ? 'Terima bukti pembayaran dan selesaikan transaksi?'
             : 'Tolak transaksi? Kursi, poin, dan diskon akan dikembalikan.';
         if (!window.confirm(confirmation)) return;
+        setError('');
+        setNotice('');
         try {
             const params = new URLSearchParams({
                 action: 'review',
                 bookingId: String(booking._id)
             });
             const { data } = await api.put(`/bookings?${params.toString()}`, { decision });
+            const dashboardLoaded = await loadDashboard();
+            if (!dashboardLoaded) {
+                setError('');
+                setNotice(data.emailSent
+                    ? 'Keputusan tersimpan dan email pemberitahuan sudah dikirim, tetapi dashboard gagal diperbarui. Muat ulang halaman.'
+                    : 'Keputusan tersimpan, tetapi dashboard gagal diperbarui. Email pemberitahuan belum terkirim; muat ulang halaman.');
+                return;
+            }
             setNotice(data.emailSent
                 ? 'Keputusan tersimpan dan email pemberitahuan sudah dikirim.'
                 : 'Keputusan tersimpan. Email belum terkirim; periksa konfigurasi SMTP.');
-            await loadDashboard();
         } catch (caught) {
+            setNotice('');
             setError(caught.response?.data?.message || 'Keputusan transaksi belum dapat disimpan.');
         }
     };
