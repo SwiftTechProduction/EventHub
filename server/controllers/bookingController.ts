@@ -508,7 +508,7 @@ export const getPaymentProofChunk = async (req, res) => {
                   AND ($2 IN ('admin', 'it') OR e.created_by = $3)
             )
             SELECT SUBSTRING(payment_proof FROM 1 FOR separator + 7) AS prefix,
-                   SUBSTRING(payment_proof FROM separator + 8 + $4 * $5 FOR $5) AS content,
+                   SUBSTRING(payment_proof FROM separator + 8 + $4::integer * $5::integer FOR $5::integer) AS content,
                    LENGTH(SUBSTRING(payment_proof FROM separator + 8))::int AS "contentLength"
             FROM stored_proof`,
             [req.params.id, req.user.role, req.user.id, chunkIndex, PAYMENT_PROOF_RESPONSE_CHUNK_SIZE]
