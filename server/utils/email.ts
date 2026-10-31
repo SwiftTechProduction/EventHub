@@ -83,7 +83,8 @@ export const sendBookingCreatedEmail = async (
     userName: string,
     eventTitle: string,
     bookingId: number | string,
-    amount: number
+    amount: number,
+    paymentRequired: boolean
 ): Promise<boolean> => {
     const mailer = createMailer();
     if (!mailer) {
@@ -94,19 +95,26 @@ export const sendBookingCreatedEmail = async (
     const safeName = escapeHtml(userName);
     const safeEventTitle = escapeHtml(eventTitle);
     const formattedAmount = formatRupiah(amount);
+    const subject = paymentRequired
+        ? `Konfirmasi pesanan (menunggu pembayaran): ${eventTitle}`
+        : `Konfirmasi pesanan tiket: ${eventTitle}`;
+    const paymentInstructions = paymentRequired
+        ? 'Silakan lakukan pembayaran dan unggah bukti pembayaran melalui dashboard EventHub dalam 2 jam. Pesanan akan dibatalkan otomatis jika bukti belum diunggah sebelum tenggat.'
+        : 'Tiket Anda tidak memerlukan pembayaran. Pesanan sedang menunggu konfirmasi organizer; pantau statusnya melalui dashboard EventHub.';
+    const safePaymentInstructions = escapeHtml(paymentInstructions);
     try {
         await mailer.mailer.sendMail({
             from: mailer.sender,
             to: userEmail,
-            subject: `Pesanan tiket diterima: ${eventTitle}`,
-            text: `Halo ${userName}, pesanan tiket Anda untuk ${eventTitle} sudah dibuat. Total: ${formattedAmount}. Silakan buka dashboard EventHub untuk melihat status dan langkah berikutnya.`,
+            subject,
+            text: `Halo ${userName}, pesanan tiket Anda untuk ${eventTitle} sudah tercatat. Total: ${formattedAmount}. ${paymentInstructions}`,
             html: `<main style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:32px;color:#172033">
-                <h1 style="font-size:24px">Pesanan tiket berhasil dibuat</h1>
+                <h1 style="font-size:24px">${paymentRequired ? 'Pesanan dikonfirmasi — menunggu pembayaran' : 'Pesanan tiket berhasil dibuat'}</h1>
                 <p>Halo ${safeName},</p>
                 <p>Pesanan Anda untuk <strong>${safeEventTitle}</strong> sudah tercatat.</p>
                 <p>Total pesanan: <strong>${formattedAmount}</strong></p>
                 <p>Nomor pesanan: <strong>${escapeHtml(String(bookingId))}</strong></p>
-                <p>Buka dashboard EventHub untuk melihat status dan langkah pembayaran berikutnya.</p>
+                <p>${safePaymentInstructions}</p>
             </main>`
         });
         return true;

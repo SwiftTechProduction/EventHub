@@ -5,6 +5,7 @@ import api from '../utils/axios';
 import { useAuth } from '../context/AuthContext';
 import type { EventItem, TicketType } from '../types';
 import { formatRupiah } from '../utils/currency';
+import { formatEventSchedule } from '../utils/eventSchedule';
 
 interface EventReview {
     _id: number | string;
@@ -15,17 +16,6 @@ interface EventReview {
 }
 
 type ScheduleConflict = Pick<EventItem, '_id' | 'title' | 'date' | 'endDate'>;
-
-const formatEventSchedule = (date: string, endDate?: string) => {
-    const start = new Date(date);
-    const end = new Date(endDate || date);
-    const formattedStart = start.toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
-    if (start.getTime() === end.getTime()) return formattedStart;
-    const formattedEnd = start.toDateString() === end.toDateString()
-        ? end.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-        : end.toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
-    return `${formattedStart}–${formattedEnd}`;
-};
 
 /** Menampilkan detail event, proses checkout, dan ulasan peserta. */
 const EventDetail = () => {
@@ -181,7 +171,7 @@ const EventDetail = () => {
                     <span className="eyebrow text-white/75">{event.category}</span>
                     <h1 className="mt-4 max-w-3xl text-4xl font-black leading-tight text-white md:text-6xl">{event.title}</h1>
                     <p className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/80">
-                        <span><FaCalendarAlt className="mr-2 inline" />{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'long' })}</span>
+                        <span><FaCalendarAlt className="mr-2 inline" />{formatEventSchedule(event.date, event.endDate)}</span>
                         <span><FaMapMarkerAlt className="mr-2 inline" />{event.location}</span>
                     </p>
                     {event.organizer && (
@@ -214,7 +204,6 @@ const EventDetail = () => {
                         <p className="mt-5 whitespace-pre-line leading-7 text-slate-600">{event.description}</p>
                         <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-500">
                             <span className="rounded-xl bg-slate-50 px-4 py-3"><FaChair className="mr-2 inline text-violet-600" />{event.availableSeats} tiket tersedia</span>
-                            {event.endDate && <span className="rounded-xl bg-slate-50 px-4 py-3">Berakhir {new Date(event.endDate).toLocaleDateString('id-ID')}</span>}
                         </div>
                     </article>
 

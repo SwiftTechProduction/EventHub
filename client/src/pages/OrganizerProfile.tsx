@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import api from '../utils/axios';
 import type { EventItem } from '../types';
+import { formatEventSchedule } from '../utils/eventSchedule';
 
 interface OrganizerSummary {
     _id: number | string;
@@ -58,7 +59,7 @@ const OrganizerProfile = () => {
                                 <div className="p-5">
                                     <span className="eyebrow">{event.category}</span>
                                     <h3 className="mt-2 font-bold text-slate-900">{event.title}</h3>
-                                    <p className="mt-2 text-sm text-slate-500">{new Date(event.date).toLocaleDateString('id-ID')} · {event.location}</p>
+                                    <p className="mt-2 text-sm text-slate-500">{formatEventSchedule(event.date, event.endDate)} · {event.location}</p>
                                 </div>
                             </Link>
                         ))}

@@ -4,6 +4,7 @@ import { FaArrowRight, FaCalendarAlt, FaMapMarkerAlt, FaSearch, FaTicketAlt } fr
 import api from '../utils/axios';
 import type { EventItem } from '../types';
 import { formatRupiah } from '../utils/currency';
+import { formatEventSchedule } from '../utils/eventSchedule';
 
 const categories = [
     { label: 'Semua kategori', value: '' },
@@ -170,7 +171,7 @@ const Home = () => {
                                 </div>
                                 <div className="p-5">
                                     <h3 className="line-clamp-2 min-h-14 text-lg font-extrabold leading-7 text-slate-900">{event.title}</h3>
-                                    <p className="mt-3 flex items-center gap-2 text-sm text-slate-500"><FaCalendarAlt className="text-violet-500" />{new Date(event.date).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</p>
+                                    <p className="mt-3 flex items-center gap-2 text-sm text-slate-500"><FaCalendarAlt className="shrink-0 text-violet-500" />{formatEventSchedule(event.date, event.endDate)}</p>
                                     <p className="mt-2 flex items-center gap-2 text-sm text-slate-500"><FaMapMarkerAlt className="text-violet-500" />{event.location}</p>
                                     <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
                                         <span className={`text-xs font-semibold ${event.availableSeats < 10 ? 'text-amber-700' : 'text-slate-500'}`}>

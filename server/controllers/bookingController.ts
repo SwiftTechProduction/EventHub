@@ -244,7 +244,8 @@ export const bookEvent = async (req, res) => {
             booking.rows[0].userId.name,
             booking.rows[0].eventId.title,
             result.id,
-            Number(booking.rows[0].amount)
+            Number(booking.rows[0].amount),
+            booking.rows[0].status === 'waiting_for_payment'
         );
         res.status(201).json({
             message: result.paymentDeadline
@@ -266,8 +267,8 @@ export const uploadPaymentProof = async (req, res) => {
         if (!/^data:(image\/(jpeg|png|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/.test(proof)) {
             return res.status(400).json({ message: 'Pilih bukti berupa gambar PNG/JPG/WebP atau PDF.' });
         }
-        if (proof.length > 7_000_000) {
-            return res.status(413).json({ message: 'Ukuran bukti pembayaran maksimal 5 MB.' });
+        if (proof.length > 4_000_000) {
+            return res.status(413).json({ message: 'Bukti pembayaran terlalu besar setelah diproses. Kompres gambar atau pilih PDF maksimal 2,9 MB.' });
         }
 
         const updated = await pool.query(

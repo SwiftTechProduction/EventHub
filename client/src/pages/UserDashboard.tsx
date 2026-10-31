@@ -5,6 +5,113 @@ import { useAuth } from '../context/AuthContext';
 import api from '../utils/axios';
 import type { Booking, UserProfile } from '../types';
 import { formatRupiah } from '../utils/currency';
+import { formatEventSchedule } from '../utils/eventSchedule';
+
+const MAX_PROOF_FILE_SIZE = 5_000_000;
+const MAX_PROOF_DATA_URL_SIZE = 4_000_000;
+const MAX_PDF_FILE_SIZE = 2_900_000;
+
+const loadImage = (file: File): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(image);
+    };
+    image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Gambar bukti pembayaran tidak dapat dibaca.'));
+    };
+    image.src = objectUrl;
+});
+
+const canvasToJpeg = (canvas: HTMLCanvasElement, quality: number): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+        canvas.toBlob(
+            (blob) => blob ? resolve(blob) : reject(new Error('Gambar bukti pembayaran gagal diproses.')),
+            'image/jpeg',
+            quality
+        );
+    });
+
+const readAsDataUrl = (file: Blob): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('File bukti pembayaran tidak dapat dibaca.'));
+    reader.onerror = () => reject(new Error('File bukti pembayaran tidak dapat dibaca.'));
+    reader.readAsDataURL(file);
+});
+
+const preparePaymentProof = async (file: File): Promise<string> => {
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const declaredType = file.type.toLowerCase();
+    const fallbackType = extension === 'pdf'
+        ? 'application/pdf'
+        : ['jpg', 'jpeg'].includes(extension || '')
+            ? 'image/jpeg'
+            : extension === 'png'
+                ? 'image/png'
+                : extension === 'webp'
+                    ? 'image/webp'
+                    : '';
+    const fileType = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'application/pdf'].includes(declaredType)
+        ? declaredType
+        : fallbackType;
+
+    if (fileType === 'application/pdf') {
+        if (file.size > MAX_PDF_FILE_SIZE) {
+            throw new Error('Ukuran bukti PDF maksimal 2,9 MB.');
+        }
+        return readAsDataUrl(new Blob([file], { type: 'application/pdf' }));
+    }
+
+    if (!['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp'].includes(fileType)) {
+        throw new Error('Format bukti harus JPG, PNG, WebP, atau PDF.');
+    }
+    if (file.size > MAX_PROOF_FILE_SIZE) {
+        throw new Error('Ukuran gambar bukti maksimal 5 MB.');
+    }
+
+    let imageBlob: Blob = file;
+    if (file.size > 2_800_000) {
+        const image = await loadImage(file);
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, 2400 / Math.max(image.naturalWidth, image.naturalHeight));
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Browser tidak dapat memproses gambar bukti.');
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+        imageBlob = await canvasToJpeg(canvas, 0.84);
+        for (const quality of [0.76, 0.68]) {
+            if (imageBlob.size <= 2_800_000) break;
+            imageBlob = await canvasToJpeg(canvas, quality);
+        }
+        while (imageBlob.size > 2_800_000 && Math.max(canvas.width, canvas.height) > 900) {
+            canvas.width = Math.round(canvas.width * 0.8);
+            canvas.height = Math.round(canvas.height * 0.8);
+            const resizedContext = canvas.getContext('2d');
+            if (!resizedContext) throw new Error('Browser tidak dapat memproses gambar bukti.');
+            resizedContext.drawImage(image, 0, 0, canvas.width, canvas.height);
+            imageBlob = await canvasToJpeg(canvas, 0.68);
+        }
+        if (imageBlob.size > 2_800_000) {
+            throw new Error('Gambar terlalu besar untuk diproses. Pilih gambar dengan ukuran lebih kecil.');
+        }
+    }
+
+    const outputMimeType = imageBlob === file
+        ? (fileType === 'image/jpg' || fileType === 'image/pjpeg' ? 'image/jpeg' : fileType)
+        : 'image/jpeg';
+    const dataUrl = await readAsDataUrl(new Blob([imageBlob], { type: outputMimeType }));
+    const normalizedDataUrl = dataUrl.replace(/^data:image\/(?:jpg|pjpeg);/i, 'data:image/jpeg;');
+    if (normalizedDataUrl.length > MAX_PROOF_DATA_URL_SIZE) {
+        throw new Error('Bukti pembayaran terlalu besar setelah diproses. Pilih file yang lebih kecil.');
+    }
+    return normalizedDataUrl;
+};
 
 /** Menampilkan transaksi, poin referral, kupon, dan pengaturan profil pelanggan. */
 const UserDashboard = () => {
@@ -93,23 +200,17 @@ const UserDashboard = () => {
     /** Membaca bukti pembayaran lokal lalu mengirimkannya pada transaksi aktif. */
     const uploadProof = async (bookingId: number | string, file?: File) => {
         if (!file) return;
-        if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type) || file.size > 5_000_000) {
-            setError('Bukti harus berupa JPG, PNG, WebP, atau PDF maksimal 5 MB.');
-            return;
+        setError('');
+        try {
+            const paymentProof = await preparePaymentProof(file);
+            await api.post(`/bookings/${bookingId}/payment-proof`, { paymentProof });
+            setNotice('Bukti diterima. Organizer akan memeriksa transaksi Anda.');
+            await loadDashboard();
+        } catch (caught) {
+            setError(caught.response?.status === 413
+                ? 'File bukti terlalu besar untuk dikirim. Gambar dikompres otomatis; coba file lebih kecil atau PDF maksimal 2,9 MB.'
+                : caught.response?.data?.message || caught.message || 'Bukti pembayaran belum dapat diunggah.');
         }
-        const reader = new FileReader();
-        reader.onerror = () => setError('File bukti pembayaran tidak dapat dibaca.');
-        reader.onload = async () => {
-            setError('');
-            try {
-                await api.post(`/bookings/${bookingId}/payment-proof`, { paymentProof: reader.result });
-                setNotice('Bukti diterima. Organizer akan memeriksa transaksi Anda.');
-                await loadDashboard();
-            } catch (caught) {
-                setError(caught.response?.data?.message || 'Bukti pembayaran belum dapat diunggah.');
-            }
-        };
-        reader.readAsDataURL(file);
     };
 
     /** Membatalkan transaksi melalui dialog konfirmasi dan memuat saldo yang dikembalikan. */
@@ -191,7 +292,12 @@ const UserDashboard = () => {
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                             <div>
                                                 <h3 className="font-bold text-slate-900">{booking.eventId?.title || 'Event tidak tersedia'}</h3>
-                                                <p className="mt-1 text-sm text-slate-500">{booking.quantity} × {booking.ticketType} · {new Date(booking.bookedAt).toLocaleString('id-ID')}</p>
+                                                <p className="mt-1 text-sm text-slate-500">{booking.quantity} × {booking.ticketType} · dipesan {new Date(booking.bookedAt).toLocaleString('id-ID')}</p>
+                                                {booking.eventId && (
+                                                    <p className="mt-1 text-sm text-slate-500">
+                                                        {formatEventSchedule(booking.eventId.date, booking.eventId.endDate)}
+                                                    </p>
+                                                )}
                                             </div>
                                             <span className={`status-pill status-${booking.status}`}>{statusLabel(booking.status)}</span>
                                         </div>
@@ -208,8 +314,9 @@ const UserDashboard = () => {
                                                 <p className="mt-1 text-xs text-amber-700">Transaksi akan expired otomatis saat hitung mundur habis.</p>
                                                 <label className="mt-3 inline-flex cursor-pointer items-center rounded-lg bg-amber-900 px-4 py-2 text-sm font-bold text-white hover:bg-amber-800">
                                                     Pilih bukti pembayaran
-                                                    <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => void uploadProof(booking._id, e.target.files?.[0])} />
+                                                    <input className="sr-only" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf" onChange={(e) => { void uploadProof(booking._id, e.target.files?.[0]); e.currentTarget.value = ''; }} />
                                                 </label>
+                                                <p className="mt-2 text-xs text-amber-700">Gambar JPG/PNG/WebP maks. 5 MB (dikompres otomatis); PDF maks. 2,9 MB.</p>
                                             </div>
                                         )}
                                         {booking.status === 'waiting_for_admin_confirmation' && (
