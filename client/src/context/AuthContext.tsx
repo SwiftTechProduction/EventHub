@@ -8,10 +8,13 @@ const getApiErrorMessage = (error: unknown, fallback: string): string => {
     if (axios.isAxiosError<{ message?: string }>(error)) {
         if (error.response?.data?.message) return error.response.data.message;
         if (!error.response) {
-            return 'Tidak dapat terhubung ke server. Jalankan npm run dev dari folder proyek dan pastikan koneksi database di server/.env benar.';
+            return 'Tidak dapat menghubungi API. Periksa deployment backend Vercel, VITE_API_URL, dan konfigurasi CORS.';
+        }
+        if (error.response.status === 404) {
+            return 'Endpoint API tidak ditemukan. Pastikan project backend Vercel sudah memakai deployment terbaru.';
         }
         if (error.response.status >= 500) {
-            return 'Server gagal memproses pendaftaran. Pastikan backend berjalan dan DATABASE_URL Supabase di server/.env sudah memakai nilai asli, bukan teks contoh.';
+            return 'Server gagal memproses permintaan. Periksa log deployment backend Vercel untuk detailnya.';
         }
     }
     return error instanceof Error ? error.message : fallback;
