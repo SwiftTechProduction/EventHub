@@ -64,6 +64,17 @@ router.delete('/', protect, (req, res) => {
     setBookingRouteParams(req, bookingId, uploadId);
     return cancelPaymentProofUpload(req, res);
 });
+router.put('/', protect, organizer, (req, res) => {
+    if (req.query.action !== 'review') {
+        return res.status(400).json({ message: 'Aksi transaksi tidak dikenal.' });
+    }
+    const bookingId = req.query.bookingId;
+    if (typeof bookingId !== 'string' || !/^\d+$/.test(bookingId)) {
+        return res.status(400).json({ message: 'Nomor transaksi tidak valid.' });
+    }
+    setBookingRouteParams(req, bookingId);
+    return reviewBooking(req, res);
+});
 router.post('/:id/payment-proof/start', protect, startPaymentProofUpload);
 router.post('/:id/payment-proof/chunk', protect, uploadPaymentProofChunk);
 router.post('/:id/payment-proof/complete', protect, completePaymentProofUpload);

@@ -238,7 +238,11 @@ const AdminDashboard = () => {
             : 'Tolak transaksi? Kursi, poin, dan diskon akan dikembalikan.';
         if (!window.confirm(confirmation)) return;
         try {
-            const { data } = await api.put(`/bookings/${booking._id}/review`, { decision });
+            const params = new URLSearchParams({
+                action: 'review',
+                bookingId: String(booking._id)
+            });
+            const { data } = await api.put(`/bookings?${params.toString()}`, { decision });
             setNotice(data.emailSent
                 ? 'Keputusan tersimpan dan email pemberitahuan sudah dikirim.'
                 : 'Keputusan tersimpan. Email belum terkirim; periksa konfigurasi SMTP.');
