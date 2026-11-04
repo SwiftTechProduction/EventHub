@@ -1,13 +1,19 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import Home from './pages/Home';
-import EventDetail from './pages/EventDetail';
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import Home from "./pages/Home";
+import EventDetail from "./pages/EventDetail";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import UserDashboard from "./pages/UserDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+<<<<<<< HEAD
 import OrganizerProfile from './pages/OrganizerProfile';
+=======
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentFailed from "./pages/PaymentFailed";
+import OrganizerProfile from "./pages/OrganizerProfile";
+>>>>>>> 7a7913dfa9015cf1c82f26a405b85b8229e50778
 
 /** Mengatur routing utama untuk halaman publik, akun, dashboard, dan pembayaran. */
 function App() {
@@ -24,6 +30,8 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/dashboard" element={<UserDashboard />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
+            <Route path="/payment-failed" element={<PaymentFailed />} />
             <Route
               path="*"
               element={
