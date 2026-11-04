@@ -418,7 +418,25 @@ export const getOrganizerProfile = async (req, res) => {
             [req.params.id]
         );
         if (!organizer.rowCount) return res.status(404).json({ message: 'Organizer tidak ditemukan.' });
-        res.json(organizer.rows[0]);
+        const [events, reviews] = await Promise.all([
+            pool.query(
+                `${eventQuery} WHERE e.created_by = $1 AND e.is_deleted = FALSE ORDER BY e.date DESC`,
+                [req.params.id]
+            ),
+            pool.query(
+                `SELECT r.id AS "_id", r.rating, r.comment, r.created_at AS "createdAt",
+                        json_build_object('_id', u.id, 'name', u.name, 'profileImage', u.profile_image) AS user,
+                        json_build_object('_id', e.id, 'title', e.title) AS event
+                 FROM event_reviews r
+                 JOIN events e ON e.id = r.event_id AND e.is_deleted = FALSE
+                 JOIN users organizer ON organizer.id = e.created_by
+                 JOIN users u ON u.id = r.user_id
+                 WHERE organizer.id = $1
+                 ORDER BY r.created_at DESC`,
+                [req.params.id]
+            )
+        ]);
+        res.json({ ...organizer.rows[0], events: events.rows, reviews: reviews.rows });
     } catch (error) {
         console.error('Organizer profile lookup failed:', error);
         res.status(500).json({ message: 'Server gagal memuat profil organizer.' });
