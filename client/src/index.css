@@ -316,6 +316,28 @@ button:disabled {
   box-shadow: 0 20px 55px rgba(72, 52, 126, .2);
 }
 
+.organizer-events-viewport {
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+}
+
+.organizer-events-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.organizer-events-track {
+  display: flex;
+  gap: 1rem;
+}
+
+.organizer-event-card {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
 .metric-card {
   position: relative;
   min-height: 8.2rem;
@@ -482,5 +504,17 @@ button:disabled {
 
   .event-cover {
     min-height: 21rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .organizer-event-card {
+    flex-basis: calc((100% - 1rem) / 2);
+  }
+}
+
+@media (min-width: 1024px) {
+  .organizer-event-card {
+    flex-basis: calc((100% - 2rem) / 3);
   }
 }

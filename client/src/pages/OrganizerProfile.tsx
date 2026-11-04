@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import api from '../utils/axios';
 import type { EventItem } from '../types';
 import { formatEventSchedule } from '../utils/eventSchedule';
@@ -30,6 +31,16 @@ const OrganizerProfile = () => {
     const [organizer, setOrganizer] = useState<OrganizerSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const eventsViewport = useRef<HTMLDivElement>(null);
+    const [canScrollEventsBack, setCanScrollEventsBack] = useState(false);
+    const [canScrollEventsForward, setCanScrollEventsForward] = useState(false);
+
+    const updateEventScrollControls = () => {
+        const viewport = eventsViewport.current;
+        if (!viewport) return;
+        setCanScrollEventsBack(viewport.scrollLeft > 1);
+        setCanScrollEventsForward(viewport.scrollLeft + viewport.clientWidth < viewport.scrollWidth - 1);
+    };
 
     useEffect(() => {
         if (!id) return;
@@ -49,6 +60,21 @@ const OrganizerProfile = () => {
         return () => { active = false; };
     }, [id]);
 
+    useEffect(() => {
+        const viewport = eventsViewport.current;
+        if (!viewport) return;
+
+        updateEventScrollControls();
+        const observer = new ResizeObserver(updateEventScrollControls);
+        observer.observe(viewport);
+        return () => observer.disconnect();
+    }, [organizer?.events]);
+
+    const scrollEvents = (direction: -1 | 1) => {
+        const viewport = eventsViewport.current;
+        if (viewport) viewport.scrollBy({ left: direction * viewport.clientWidth, behavior: 'smooth' });
+    };
+
     if (loading) return <div className="page-message">Memuat profil organizer…</div>;
     if (!organizer) return <div className="page-message">{error || 'Organizer tidak ditemukan.'}</div>;
 
@@ -67,19 +93,47 @@ const OrganizerProfile = () => {
                 </div>
             </section>
             <section className="mt-8">
-                <h2 className="mb-5 text-2xl font-extrabold text-slate-900">Event dari organizer ini</h2>
+                <div className="mb-5 flex items-center justify-between gap-4">
+                    <h2 className="text-2xl font-extrabold text-slate-900">Event dari organizer ini</h2>
+                    {(canScrollEventsBack || canScrollEventsForward) && (
+                        <div className="flex shrink-0 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => scrollEvents(-1)}
+                                disabled={!canScrollEventsBack}
+                                aria-label="Event sebelumnya"
+                                title="Event sebelumnya"
+                                className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-violet-300 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                <FaChevronLeft aria-hidden="true" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => scrollEvents(1)}
+                                disabled={!canScrollEventsForward}
+                                aria-label="Event berikutnya"
+                                title="Event berikutnya"
+                                className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-violet-300 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                <FaChevronRight aria-hidden="true" />
+                            </button>
+                        </div>
+                    )}
+                </div>
                 {!organizer.events.length ? <p className="surface-card p-7 text-sm text-slate-500">Organizer ini belum memiliki event aktif.</p> :
-                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                        {organizer.events.map((event) => (
-                            <Link to={`/events/${event._id}`} key={event._id} className="surface-card overflow-hidden transition hover:-translate-y-1 hover:shadow-lg">
-                                <img src={event.image} alt="" className="h-44 w-full object-cover" />
-                                <div className="p-5">
-                                    <span className="eyebrow">{event.category}</span>
-                                    <h3 className="mt-2 font-bold text-slate-900">{event.title}</h3>
-                                    <p className="mt-2 text-sm text-slate-500">{formatEventSchedule(event.date, event.endDate)} · {event.location}</p>
-                                </div>
-                            </Link>
-                        ))}
+                    <div ref={eventsViewport} onScroll={updateEventScrollControls} className="organizer-events-viewport">
+                        <div className="organizer-events-track">
+                            {organizer.events.map((event) => (
+                                <Link to={`/events/${event._id}`} key={event._id} className="organizer-event-card surface-card overflow-hidden transition hover:-translate-y-1 hover:shadow-lg">
+                                    <img src={event.image} alt="" className="h-44 w-full object-cover" />
+                                    <div className="p-5">
+                                        <span className="eyebrow">{event.category}</span>
+                                        <h3 className="mt-2 font-bold text-slate-900">{event.title}</h3>
+                                        <p className="mt-2 text-sm text-slate-500">{formatEventSchedule(event.date, event.endDate)} · {event.location}</p>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
                     </div>
                 }
             </section>
