@@ -247,7 +247,7 @@ const EventDetail = () => {
                 </section>
 
                 {/* Panel checkout memvalidasi kuantitas, OTP, kupon, voucher, dan poin. */}
-                <aside className="surface-card h-fit p-6 md:sticky md:top-24">
+                <aside className="surface-card h-fit p-6 lg:sticky lg:top-24">
                     <span className="eyebrow">AMANKAN TEMPATMU</span>
                     <h2 className="mt-2 text-2xl font-extrabold text-slate-900">Pilih tiket</h2>
                     {event.ticketTypes?.length ? (

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FaChartLine, FaTicketAlt } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/axios';
@@ -65,8 +65,6 @@ const AdminDashboard = () => {
     const [saving, setSaving] = useState(false);
     const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
     const [proofViewer, setProofViewer] = useState<{ url: string; mimeType: string } | null>(null);
-    const [currentPassword, setCurrentPassword] = useState('');
-    const [newPassword, setNewPassword] = useState('');
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const eventFormRef = useRef<HTMLElement>(null);
@@ -329,24 +327,6 @@ const AdminDashboard = () => {
         }
     };
 
-    const changePassword = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        if (!window.confirm('Ganti password akun ini?')) return;
-        setSaving(true);
-        setError('');
-        setNotice('');
-        try {
-            await api.put('/auth/profile', { currentPassword, newPassword });
-            setCurrentPassword('');
-            setNewPassword('');
-            setNotice('Password akun berhasil diperbarui.');
-        } catch (caught) {
-            setError(caught.response?.data?.message || 'Password belum dapat diperbarui.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
     /** Menentukan tinggi batang laporan relatif terhadap nilai terbesar. */
     const maxRevenue = useMemo(() => Math.max(...stats.map((item) => Number(item.revenue)), 1), [stats]);
     const revenue = bookings.filter((booking) => booking.status === 'done').reduce((sum, booking) => sum + booking.amount, 0);
@@ -387,9 +367,12 @@ const AdminDashboard = () => {
                     <h1 className="mt-2 text-3xl font-extrabold text-white md:text-4xl">{user?.role === 'it' ? 'Dashboard IT' : 'Dashboard Organizer'}</h1>
                     <p className="mt-2 text-sm text-white/70">{user?.role === 'it' ? 'Akses All Transactions - Manage User Login, Event, dan Transaksi.' : 'Kelola acara, periksa pembayaran, dan lihat perkembangan penjualan.'}</p>
                 </div>
-                <button onClick={() => { setEditingEventId(null); setFormData(emptyForm); setShowEventForm(!showEventForm); }} className="button-light">
-                    {showEventForm ? 'Tutup formulir' : '+ Buat event'}
-                </button>
+                <div className="flex flex-wrap gap-3">
+                    <Link to="/settings" className="button-ghost">Profil dan keamanan</Link>
+                    <button onClick={() => { setEditingEventId(null); setFormData(emptyForm); setShowEventForm(!showEventForm); }} className="button-light">
+                        {showEventForm ? 'Tutup formulir' : '+ Buat event'}
+                    </button>
+                </div>
             </section>
             {error && <p role="alert" className="notice notice-error mt-5">{error}</p>}
             {notice && <p role="status" className="notice notice-success mt-5">{notice}</p>}
@@ -435,22 +418,6 @@ const AdminDashboard = () => {
                     </div>
                 </section>
             )}
-
-            <section className="surface-card mt-7 p-5 md:p-7">
-                <h2 className="text-xl font-extrabold text-slate-900">Keamanan akun</h2>
-                <p className="mt-1 text-sm text-slate-500">Ganti password akun ini menggunakan password saat ini.</p>
-                <form onSubmit={changePassword} className="mt-5 grid gap-4 md:grid-cols-3">
-                    <label className="field-label">Password saat ini
-                        <input className="field-control mt-2" type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
-                    </label>
-                    <label className="field-label">Password baru (minimal 8 karakter)
-                        <input className="field-control mt-2" type="password" autoComplete="new-password" minLength={8} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
-                    </label>
-                    <div className="flex items-end">
-                        <button className="button-primary w-full" disabled={saving}>{saving ? 'Menyimpan…' : 'Ganti password'}</button>
-                    </div>
-                </form>
-            </section>
 
             {showEventForm && (
                 <section ref={eventFormRef} className="surface-card mt-7 scroll-mt-24 p-5 md:p-7">

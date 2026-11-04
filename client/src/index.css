@@ -100,6 +100,35 @@ button:disabled {
   color: #6c4ce5;
 }
 
+.settings-nav-item {
+  display: inline-flex;
+  min-height: 2.8rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: .7rem;
+  border: 1px solid transparent;
+  border-radius: .75rem;
+  padding: .65rem .85rem;
+  color: #596174;
+  font-size: .85rem;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.settings-nav-item:hover,
+.settings-nav-item-active {
+  border-color: #e8e2ff;
+  background: #f5f2ff;
+  color: #6546d7;
+}
+
+@media (min-width: 1024px) {
+  .settings-nav-item {
+    width: 100%;
+  }
+}
+
 .surface-card {
   border: 1px solid #e9eaf2;
   border-radius: 1.35rem;

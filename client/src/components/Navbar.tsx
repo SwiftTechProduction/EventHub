@@ -49,6 +49,9 @@ const Navbar = () => {
                                     ? <><FaCalendarAlt className="mr-1 inline" />{user.role === 'it' ? 'Dashboard IT' : 'Dashboard Organizer'}</>
                                     : 'Akun saya'}
                             </NavLink>
+                            <NavLink to="/settings" onClick={closeMenu} className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>
+                                Pengaturan
+                            </NavLink>
                             <button onClick={handleLogout} className="button-primary min-h-9 px-4 py-2 text-xs">Keluar</button>
                         </>
                     ) : (

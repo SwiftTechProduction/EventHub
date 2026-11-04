@@ -63,12 +63,7 @@ const UserDashboard = () => {
     const navigate = useNavigate();
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [name, setName] = useState('');
-    const [profileImage, setProfileImage] = useState('');
-    const [currentPassword, setCurrentPassword] = useState('');
-    const [newPassword, setNewPassword] = useState('');
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
     const [uploadingProofId, setUploadingProofId] = useState<string | null>(null);
     const [pointStatement, setPointStatement] = useState<PointStatement | null>(null);
     const [showPointHistory, setShowPointHistory] = useState(false);
@@ -113,51 +108,11 @@ const UserDashboard = () => {
                 api.get('/bookings/my')
             ]);
             setProfile(profileResponse.data);
-            setName(profileResponse.data.name);
-            setProfileImage(profileResponse.data.profileImage || '');
             setBookings(bookingResponse.data);
         } catch (caught) {
             setError(caught.response?.data?.message || 'Dashboard belum dapat dimuat.');
         } finally {
             setLoading(false);
-        }
-    };
-
-    /** Mengunggah avatar kecil dari perangkat tanpa menambah layanan storage. */
-    const handleAvatar = (file?: File) => {
-        if (!file) return;
-        if (!file.type.startsWith('image/') || file.size > 2_000_000) {
-            setError('Pilih file gambar berukuran maksimal 2 MB.');
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => setProfileImage(String(reader.result));
-        reader.onerror = () => setError('Foto profil tidak dapat dibaca.');
-        reader.readAsDataURL(file);
-    };
-
-    /** Menyimpan data profil atau password baru setelah konfirmasi pengguna. */
-    const saveProfile = async (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        if (!window.confirm('Simpan perubahan profil ini?')) return;
-        setSaving(true);
-        setError('');
-        setNotice('');
-        try {
-            await api.put('/auth/profile', {
-                name,
-                profileImage,
-                currentPassword: currentPassword || undefined,
-                newPassword: newPassword || undefined
-            });
-            setCurrentPassword('');
-            setNewPassword('');
-            setNotice('Profil berhasil diperbarui.');
-            await loadDashboard();
-        } catch (caught) {
-            setError(caught.response?.data?.message || 'Perubahan profil belum dapat disimpan.');
-        } finally {
-            setSaving(false);
         }
     };
 
@@ -263,11 +218,11 @@ const UserDashboard = () => {
 
     return (
         <div className="mx-auto max-w-6xl">
-            {/* Header profil menunjukkan saldo, referral, dan pintasan logout. */}
+            {/* Header akun menunjukkan saldo dan referral. */}
             <section className="dashboard-hero">
                 <div className="flex items-center gap-4">
                     <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-white/15 text-2xl font-bold">
-                        {profile?.profileImage ? <img src={profile.profileImage} alt="" className="h-full w-full object-cover" /> : user?.name[0]}
+                        {user?.profileImage ? <img src={user.profileImage} alt="" className="h-full w-full object-cover" /> : user?.name[0]}
                     </div>
                     <div>
                         <span className="eyebrow text-white/65">RUANG PELANGGAN</span>
@@ -304,7 +259,7 @@ const UserDashboard = () => {
                 </article>
             </div>
 
-            <div className="mt-8 grid gap-7 lg:grid-cols-[1fr_340px]">
+            <div className="mt-8">
                 {/* Kartu transaksi memaparkan status dan upload bukti sebelum batas waktu. */}
                 <section>
                     <div className="mb-4 flex items-end justify-between gap-3">
@@ -376,39 +331,6 @@ const UserDashboard = () => {
                         ))}
                     </div>
                 </section>
-
-                {/* Profil dan kupon dapat diperbarui tanpa menampilkan data sensitif. */}
-                <aside className="space-y-6">
-                    <form onSubmit={saveProfile} className="surface-card p-5">
-                        <h2 className="text-lg font-extrabold text-slate-900">Profil & keamanan</h2>
-                        <label className="field-label mt-4" htmlFor="profile-name">Nama</label>
-                        <input id="profile-name" className="field-control" value={name} onChange={(e) => setName(e.target.value)} required />
-                        <label className="field-label mt-4" htmlFor="profile-picture">Foto profil</label>
-                        <input id="profile-picture" className="field-control" type="file" accept="image/*" onChange={(e) => handleAvatar(e.target.files?.[0])} />
-                        <label className="field-label mt-4" htmlFor="current-password">Password saat ini (untuk mengganti password)</label>
-                        <input id="current-password" className="field-control" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
-                        <label className="field-label mt-4" htmlFor="new-password">Password baru</label>
-                        <input id="new-password" className="field-control" type="password" minLength={8} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                        <button className="button-primary mt-5 w-full" disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan profil'}</button>
-                    </form>
-
-                    <article className="surface-card p-5">
-                        <h2 className="text-lg font-extrabold text-slate-900">Kupon saya</h2>
-                        <p className="mt-1 text-xs text-slate-500">Masukkan kode kupon pada halaman checkout event.</p>
-                        <div className="mt-4 space-y-3">
-                            {!profile?.coupons.length ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">Belum ada kupon referral.</p> :
-                                profile.coupons.map((coupon) => (
-                                    <div key={coupon.id} className="rounded-xl border border-dashed border-violet-200 bg-violet-50 p-4">
-                                        <strong className="text-violet-900">{coupon.code}</strong>
-                                        <p className="mt-1 text-sm text-violet-800">
-                                            {coupon.discountType === 'percent' ? `${coupon.discountValue}%` : formatRupiah(coupon.discountValue)} ·
-                                            {' '}{coupon.usedAt ? 'Sudah dipakai' : `berlaku sampai ${new Date(coupon.expiresAt).toLocaleDateString('id-ID')}`}
-                                        </p>
-                                    </div>
-                                ))}
-                        </div>
-                    </article>
-                </aside>
             </div>
             {showPointHistory && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">

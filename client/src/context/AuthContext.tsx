@@ -43,6 +43,7 @@ interface AuthContextValue {
     ) => Promise<RegisterResult>;
     resendVerificationOTP: (email: string) => Promise<VerificationResult>;
     verifyOTP: (email: string, otp: string) => Promise<User>;
+    updateUser: (changes: Partial<User>) => void;
     logout: () => void;
     loading: boolean;
 }
@@ -130,6 +131,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
+    const updateUser = (changes: Partial<User>) => {
+        setUser((current) => {
+            if (!current) return current;
+            const updated = { ...current, ...changes };
+            localStorage.setItem('userInfo', JSON.stringify(updated));
+            return updated;
+        });
+    };
+
     /** Menghapus status login serta token dari memori dan penyimpanan browser. */
     const logout = () => {
         setUser(null);
@@ -138,7 +148,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, register, resendVerificationOTP, verifyOTP, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, register, resendVerificationOTP, verifyOTP, updateUser, logout, loading }}>
             {!loading && children}
         </AuthContext.Provider>
     );
