@@ -362,10 +362,17 @@ const AdminDashboard = () => {
         <div className="mx-auto max-w-7xl">
             {/* Header memperkenalkan ringkasan dan tindakan utama organizer. */}
             <section className="dashboard-hero">
-                <div>
-                    <span className="eyebrow text-white/65">{user?.role === 'it' ? 'ADMINISTRATOR IT' : user?.role === 'admin' ? 'ADMINISTRATOR' : 'EVENT ORGANIZER'}</span>
-                    <h1 className="mt-2 text-3xl font-extrabold text-white md:text-4xl">{user?.role === 'it' ? 'Dashboard IT' : 'Dashboard Organizer'}</h1>
-                    <p className="mt-2 text-sm text-white/70">{user?.role === 'it' ? 'Akses All Transactions - Manage User Login, Event, dan Transaksi.' : 'Kelola acara, periksa pembayaran, dan lihat perkembangan penjualan.'}</p>
+                <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/15 text-xl font-bold text-white ring-2 ring-white/30">
+                        {user?.profileImage
+                            ? <img src={user.profileImage} alt="Foto profil" className="h-full w-full object-cover" />
+                            : user?.name?.[0]}
+                    </div>
+                    <div className="min-w-0">
+                        <span className="eyebrow text-white/65">{user?.role === 'it' ? 'ADMINISTRATOR IT' : user?.role === 'admin' ? 'ADMINISTRATOR' : 'EVENT ORGANIZER'}</span>
+                        <h1 className="mt-2 text-3xl font-extrabold text-white md:text-4xl">{user?.role === 'it' ? 'Dashboard IT' : 'Dashboard Organizer'}</h1>
+                        <p className="mt-2 text-sm text-white/70">{user?.role === 'it' ? 'Akses All Transactions - Manage User Login, Event, dan Transaksi.' : 'Kelola acara, periksa pembayaran, dan lihat perkembangan penjualan.'}</p>
+                    </div>
                 </div>
                 <div className="flex flex-wrap gap-3">
                     <Link to="/settings" className="button-ghost">Profil dan keamanan</Link>

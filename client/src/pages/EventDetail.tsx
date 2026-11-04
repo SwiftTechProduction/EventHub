@@ -197,7 +197,7 @@ const EventDetail = () => {
 
             <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
                 {/* Deskripsi dan ulasan dipisahkan dari panel checkout agar mudah dibaca. */}
-                <section className="space-y-7">
+                <section className="order-2 space-y-7 lg:order-1">
                     <article className="surface-card p-6 md:p-8">
                         <div className="flex flex-wrap items-center justify-between gap-4">
                             <div>
@@ -247,7 +247,7 @@ const EventDetail = () => {
                 </section>
 
                 {/* Panel checkout memvalidasi kuantitas, OTP, kupon, voucher, dan poin. */}
-                <aside className="surface-card h-fit p-6 lg:sticky lg:top-24">
+                <aside className="surface-card order-1 h-fit p-6 lg:sticky lg:top-24 lg:order-2">
                     <span className="eyebrow">AMANKAN TEMPATMU</span>
                     <h2 className="mt-2 text-2xl font-extrabold text-slate-900">Pilih tiket</h2>
                     {event.ticketTypes?.length ? (
