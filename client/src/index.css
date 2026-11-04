@@ -100,6 +100,20 @@ button:disabled {
   color: #6c4ce5;
 }
 
+.coupon-notification-badge {
+  display: inline-grid;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  border-radius: 9999px;
+  background: #dc2626;
+  padding: 0 .25rem;
+  color: #fff;
+  font-size: .65rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
 .settings-nav-item {
   display: inline-flex;
   min-height: 2.8rem;

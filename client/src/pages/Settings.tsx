@@ -1,18 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FaArrowLeft, FaTicketAlt, FaUserShield } from 'react-icons/fa';
+import { FaArrowLeft } from 'react-icons/fa';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/axios';
-import type { UserProfile } from '../types';
-import { formatRupiah } from '../utils/currency';
-
-type SettingsSection = 'profile' | 'coupons';
 
 const Settings = () => {
     const { user, updateUser } = useAuth();
     const navigate = useNavigate();
-    const [section, setSection] = useState<SettingsSection>('profile');
-    const [profile, setProfile] = useState<UserProfile | null>(null);
     const [name, setName] = useState('');
     const [profileImage, setProfileImage] = useState('');
     const [currentPassword, setCurrentPassword] = useState('');
@@ -21,7 +15,6 @@ const Settings = () => {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
-    const canViewCoupons = user?.role === 'user' || user?.role === 'customer';
 
     useEffect(() => {
         if (!user) {
@@ -35,7 +28,6 @@ const Settings = () => {
         setLoading(true);
         try {
             const { data } = await api.get('/auth/profile');
-            setProfile(data);
             setName(data.name);
             setProfileImage(data.profileImage || '');
         } catch (caught) {
@@ -93,33 +85,19 @@ const Settings = () => {
                     </Link>
                     <span className="eyebrow block">AKUN EVENTHUB</span>
                     <h1 className="mt-1 text-3xl font-extrabold text-slate-900">Pengaturan</h1>
-                    <p className="mt-2 text-sm text-slate-500">Kelola informasi akun, keamanan, dan kupon Anda.</p>
+                    <p className="mt-2 text-sm text-slate-500">Kelola informasi dan keamanan akun Anda.</p>
                 </div>
             </header>
 
             {error && <p role="alert" className="notice notice-error">{error}</p>}
             {notice && <p role="status" className="notice notice-success">{notice}</p>}
 
-            <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)]">
-                <nav aria-label="Menu pengaturan" className="flex gap-2 overflow-x-auto lg:block lg:space-y-2">
-                    <button type="button" aria-current={section === 'profile' ? 'page' : undefined} onClick={() => setSection('profile')} className={`settings-nav-item${section === 'profile' ? ' settings-nav-item-active' : ''}`}>
-                        <FaUserShield /> Profil dan Keamanan
-                    </button>
-                    {canViewCoupons && (
-                        <button type="button" aria-current={section === 'coupons' ? 'page' : undefined} onClick={() => setSection('coupons')} className={`settings-nav-item${section === 'coupons' ? ' settings-nav-item-active' : ''}`}>
-                            <FaTicketAlt /> Kupon Saya
-                        </button>
-                    )}
-                </nav>
-
-                <section className="surface-card min-w-0 p-5 md:p-8">
-                    {section === 'profile' ? (
-                        <>
-                            <div className="mb-6 border-b border-slate-100 pb-5">
-                                <h2 className="text-xl font-extrabold text-slate-900">Profil dan Keamanan</h2>
-                                <p className="mt-1 text-sm text-slate-500">Perbarui identitas dan kata sandi akun.</p>
-                            </div>
-                            <form onSubmit={saveProfile} className="max-w-2xl">
+            <section className="surface-card max-w-4xl p-5 md:p-8">
+                <div className="mb-6 border-b border-slate-100 pb-5">
+                    <h2 className="text-xl font-extrabold text-slate-900">Profil dan Keamanan</h2>
+                    <p className="mt-1 text-sm text-slate-500">Perbarui identitas dan kata sandi akun.</p>
+                </div>
+                <form onSubmit={saveProfile} className="max-w-2xl">
                                 <div className="mb-6 flex items-center gap-4">
                                     <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-100 text-2xl font-bold text-violet-800">
                                         {profileImage ? <img src={profileImage} alt="Foto profil" className="h-full w-full object-cover" /> : name[0]}
@@ -142,30 +120,8 @@ const Settings = () => {
                                 <label className="field-label mt-4" htmlFor="settings-new-password">Kata sandi baru</label>
                                 <input id="settings-new-password" className="field-control mt-2" type="password" minLength={8} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
                                 <button className="button-primary mt-6" disabled={saving}>{saving ? 'Menyimpan…' : 'Simpan perubahan'}</button>
-                            </form>
-                        </>
-                    ) : (
-                        <>
-                            <div className="mb-6 border-b border-slate-100 pb-5">
-                                <h2 className="text-xl font-extrabold text-slate-900">Kupon Saya</h2>
-                                <p className="mt-1 text-sm text-slate-500">Masukkan kode kupon saat checkout event.</p>
-                            </div>
-                            <div className="space-y-3">
-                                {!profile?.coupons.length ? <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-500">Belum ada kupon referral.</p> :
-                                    profile.coupons.map((coupon) => (
-                                        <article key={coupon.id} className="rounded-xl border border-dashed border-violet-200 bg-violet-50 p-4">
-                                            <strong className="text-violet-900">{coupon.code}</strong>
-                                            <p className="mt-1 text-sm text-violet-800">
-                                                {coupon.discountType === 'percent' ? `${coupon.discountValue}%` : formatRupiah(coupon.discountValue)} ·{' '}
-                                                {coupon.usedAt ? 'Sudah dipakai' : `berlaku sampai ${new Date(coupon.expiresAt).toLocaleDateString('id-ID')}`}
-                                            </p>
-                                        </article>
-                                    ))}
-                            </div>
-                        </>
-                    )}
-                </section>
-            </div>
+                </form>
+            </section>
         </div>
     );
 };

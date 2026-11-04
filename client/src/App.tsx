@@ -11,6 +11,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentFailed from "./pages/PaymentFailed";
 import OrganizerProfile from "./pages/OrganizerProfile";
 import Settings from "./pages/Settings";
+import Coupons from "./pages/Coupons";
 
 /** Mengatur routing utama untuk halaman publik, akun, dashboard, dan pembayaran. */
 function App() {
@@ -28,6 +29,7 @@ function App() {
             <Route path="/dashboard" element={<UserDashboard />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/coupons" element={<Coupons />} />
             <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/payment-failed" element={<PaymentFailed />} />
             <Route
