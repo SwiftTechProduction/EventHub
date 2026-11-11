@@ -319,11 +319,11 @@ export const getEventAttendees = async (req, res) => {
             return res.status(404).json({ message: 'Event tidak ditemukan atau bukan milik Anda.' });
         }
         const attendees = await pool.query(
-            `SELECT u.id AS "_id", u.name, u.email, SUM(b.quantity)::int AS quantity,
-                    SUM(b.amount)::numeric AS "totalPaid"
+            `SELECT b.id AS "_id", u.name, u.email, b.quantity,
+                    b.amount::numeric AS "totalPaid", b.status
              FROM bookings b JOIN users u ON u.id = b.user_id
-             WHERE b.event_id = $1 AND b.status = 'done'
-             GROUP BY u.id, u.name, u.email ORDER BY u.name`,
+             WHERE b.event_id = $1 AND b.status NOT IN ('canceled', 'rejected', 'expired')
+             ORDER BY b.created_at DESC, u.name`,
             [req.params.id]
         );
         res.json(attendees.rows);

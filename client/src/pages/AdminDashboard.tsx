@@ -24,7 +24,14 @@ interface Attendee {
     email: string;
     quantity: number;
     totalPaid: number;
+    status: string;
 }
+
+const attendeeStatusLabels: Record<string, string> = {
+    waiting_for_payment: 'Menunggu pembayaran',
+    waiting_for_admin_confirmation: 'Menunggu konfirmasi organizer',
+    done: 'Terkonfirmasi'
+};
 
 interface VoucherForm {
     code: string;
@@ -534,8 +541,8 @@ const AdminDashboard = () => {
                                     </div>
                                     {attendeeEvent === String(event._id) && (
                                         <div className="border-t border-slate-100 bg-slate-50 p-4">
-                                            <h4 className="font-bold text-slate-800">Peserta terkonfirmasi</h4>
-                                            {!attendees.length ? <p className="mt-2 text-sm text-slate-500">Belum ada transaksi selesai.</p> :
+                                            <h4 className="font-bold text-slate-800">Pemesan event</h4>
+                                            {!attendees.length ? <p className="mt-2 text-sm text-slate-500">Belum ada booking aktif atau selesai.</p> :
                                                 <ul className="mt-3 divide-y divide-slate-200">
                                                     {attendees.map((attendee) => (
                                                         <li key={attendee._id} className="flex justify-between gap-3 py-2 text-sm">
@@ -543,6 +550,7 @@ const AdminDashboard = () => {
                                                                 <strong className="block">{attendee.name || attendee.email}</strong>
                                                                 {attendee.name && <span className="text-slate-500">{attendee.email}</span>}
                                                                 <span className="text-slate-500"> · {attendee.quantity} tiket</span>
+                                                                <span className="block text-slate-500">{attendeeStatusLabels[attendee.status] || attendee.status}</span>
                                                             </span>
                                                             <strong>{formatRupiah(Number(attendee.totalPaid))}</strong>
                                                         </li>
