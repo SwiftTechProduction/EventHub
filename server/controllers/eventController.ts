@@ -314,8 +314,9 @@ export const getOrganizerStats = async (req, res) => {
 
 /** Menampilkan pembeli dan total pembayaran pada event yang dikelola. */
 export const getEventAttendees = async (req, res) => {
+    const eventId = req.params.id || String(req.query.eventId);
     try {
-        if (!await canManageEvent(req.params.id, req.user)) {
+        if (!await canManageEvent(eventId, req.user)) {
             return res.status(404).json({ message: 'Event tidak ditemukan atau bukan milik Anda.' });
         }
         const attendees = await pool.query(
@@ -324,7 +325,7 @@ export const getEventAttendees = async (req, res) => {
              FROM bookings b JOIN users u ON u.id = b.user_id
              WHERE b.event_id = $1 AND b.status NOT IN ('canceled', 'rejected', 'expired')
              ORDER BY b.created_at DESC, u.name`,
-            [req.params.id]
+            [eventId]
         );
         res.json(attendees.rows);
     } catch (error) {

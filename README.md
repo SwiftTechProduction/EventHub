@@ -7,7 +7,7 @@ Deploy frontend dan backend sebagai dua Vercel project dari repository yang sama
 - Frontend: **Root Directory** `client`; set `VITE_API_URL` ke origin production project backend (contoh `https://eventhub-api.vercel.app`, tanpa `/api`).
 - Backend: **Root Directory** `server`; set `DATABASE_URL` dan `JWT_SECRET` pada environment **Production**. Set `CLIENT_ORIGIN` ke origin frontend jika berbeda dari `https://eventhub-purwadhika.vercel.app`.
 - Redeploy kedua project setelah mengubah Root Directory atau Environment Variables. `VITE_API_URL` dibaca saat build frontend.
-- Backend memakai catch-all per domain API (auth, bookings, events, dan IT), ditambah endpoint health, fungsi dasar bookings/events, serta endpoint eksplisit statistik, daftar event organizer, dan daftar peserta event. Totalnya 11 Serverless Functions, di bawah batas 12 pada paket Hobby. Subroute organizer dan peserta dibuat eksplisit karena Vercel tidak selalu meneruskan subroute melalui catch-all events. Setelah perubahan backend, redeploy project backend.
+- Backend memakai catch-all per domain API (auth, bookings, events, dan IT), ditambah endpoint health, fungsi dasar bookings/events, serta endpoint eksplisit statistik dan daftar event organizer. Daftar peserta memakai `GET /api/events?action=attendees&eventId=<id>` agar tidak bentrok dengan catch-all events. Totalnya 10 Serverless Functions, di bawah batas 12 pada paket Hobby. Setelah perubahan backend, redeploy project backend.
 
 Tes backend di `https://<backend-origin>/api/health`. Respons sehat adalah JSON `{"status":"ok"}`; daftar event tersedia di `/api/events`.
 

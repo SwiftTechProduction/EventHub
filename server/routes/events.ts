@@ -19,6 +19,13 @@ import {
 import { organizer, protect } from '../middleware/auth';
 
 router.get('/', (req, res) => {
+    if (req.query.action === 'attendees') {
+        const eventId = req.query.eventId;
+        if (typeof eventId !== 'string' || !/^\d+$/.test(eventId)) {
+            return res.status(400).json({ message: 'Nomor event untuk daftar peserta tidak valid.' });
+        }
+        return protect(req, res, () => organizer(req, res, () => getEventAttendees(req, res)));
+    }
     if (req.query.action !== 'reviews') return getEvents(req, res);
     const eventId = req.query.eventId;
     if (typeof eventId !== 'string' || !/^\d+$/.test(eventId)) {

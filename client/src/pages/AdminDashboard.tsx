@@ -310,7 +310,9 @@ const AdminDashboard = () => {
         setAttendeesError('');
         setAttendeesLoading(true);
         try {
-            const { data } = await api.get(`/events/${event._id}/attendees`);
+            const { data } = await api.get('/events', {
+                params: { action: 'attendees', eventId: event._id }
+            });
             if (!Array.isArray(data)) {
                 throw new Error(data?.message || 'Server mengirim format daftar peserta yang tidak valid.');
             }
