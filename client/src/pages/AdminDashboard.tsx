@@ -539,7 +539,11 @@ const AdminDashboard = () => {
                                                 <ul className="mt-3 divide-y divide-slate-200">
                                                     {attendees.map((attendee) => (
                                                         <li key={attendee._id} className="flex justify-between gap-3 py-2 text-sm">
-                                                            <span>{attendee.name} · {attendee.quantity} tiket</span>
+                                                            <span>
+                                                                <strong className="block">{attendee.name || attendee.email}</strong>
+                                                                {attendee.name && <span className="text-slate-500">{attendee.email}</span>}
+                                                                <span className="text-slate-500"> · {attendee.quantity} tiket</span>
+                                                            </span>
                                                             <strong>{formatRupiah(Number(attendee.totalPaid))}</strong>
                                                         </li>
                                                     ))}
