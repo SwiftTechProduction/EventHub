@@ -62,7 +62,9 @@ const AdminDashboard = () => {
     const [eventPage, setEventPage] = useState(1);
     const [formData, setFormData] = useState<EventForm>(emptyForm);
     const [attendees, setAttendees] = useState<Attendee[]>([]);
-    const [attendeeEvent, setAttendeeEvent] = useState<string | null>(null);
+    const [attendeeEvent, setAttendeeEvent] = useState<EventItem | null>(null);
+    const [attendeesLoading, setAttendeesLoading] = useState(false);
+    const [attendeesError, setAttendeesError] = useState('');
     const [voucherEvent, setVoucherEvent] = useState<string | null>(null);
     const [voucherForm, setVoucherForm] = useState<VoucherForm>({
         code: '', discountType: 'percent', discountValue: '10',
@@ -302,17 +304,21 @@ const AdminDashboard = () => {
     };
 
     /** Membuka daftar peserta untuk satu event yang dikelola. */
-    const showAttendees = async (eventId: number | string) => {
-        if (attendeeEvent === String(eventId)) {
-            setAttendeeEvent(null);
-            return;
-        }
+    const showAttendees = async (event: EventItem) => {
+        setAttendeeEvent(event);
+        setAttendees([]);
+        setAttendeesError('');
+        setAttendeesLoading(true);
         try {
-            const { data } = await api.get(`/events/${eventId}/attendees`);
+            const { data } = await api.get(`/events/${event._id}/attendees`);
+            if (!Array.isArray(data)) {
+                throw new Error(data?.message || 'Server mengirim format daftar peserta yang tidak valid.');
+            }
             setAttendees(data);
-            setAttendeeEvent(String(eventId));
         } catch (caught) {
-            setError(caught.response?.data?.message || 'Daftar peserta belum dapat dimuat.');
+            setAttendeesError(caught.response?.data?.message || caught.message || 'Daftar peserta belum dapat dimuat.');
+        } finally {
+            setAttendeesLoading(false);
         }
     };
 
@@ -533,31 +539,12 @@ const AdminDashboard = () => {
                                                     : !event.isDeleted && <>
                                                         <button className="button-small" onClick={() => editEvent(event)}>Edit</button>
                                                         {event.ticketPrice > 0 && <button className="button-small" onClick={() => setVoucherEvent(String(event._id))}>Buat voucher</button>}
-                                                        <button className="button-small" onClick={() => void showAttendees(event._id)}>{attendeeEvent === String(event._id) ? 'Tutup peserta' : 'Daftar peserta'}</button>
+                                                        <button className="button-small" onClick={() => void showAttendees(event)}>Daftar peserta</button>
                                                         <button className="button-small button-danger" onClick={() => void deleteEvent(event)}>Hapus</button>
                                                     </>}
                                             </div>
                                         </div>
                                     </div>
-                                    {attendeeEvent === String(event._id) && (
-                                        <div className="border-t border-slate-100 bg-slate-50 p-4">
-                                            <h4 className="font-bold text-slate-800">Pemesan event</h4>
-                                            {!attendees.length ? <p className="mt-2 text-sm text-slate-500">Belum ada booking aktif atau selesai.</p> :
-                                                <ul className="mt-3 divide-y divide-slate-200">
-                                                    {attendees.map((attendee) => (
-                                                        <li key={attendee._id} className="flex justify-between gap-3 py-2 text-sm">
-                                                            <span>
-                                                                <strong className="block">{attendee.name || attendee.email}</strong>
-                                                                {attendee.name && <span className="text-slate-500">{attendee.email}</span>}
-                                                                <span className="text-slate-500"> · {attendee.quantity} tiket</span>
-                                                                <span className="block text-slate-500">{attendeeStatusLabels[attendee.status] || attendee.status}</span>
-                                                            </span>
-                                                            <strong>{formatRupiah(Number(attendee.totalPaid))}</strong>
-                                                        </li>
-                                                    ))}
-                                                </ul>}
-                                        </div>
-                                    )}
                                 </article>
                             ))
                         }
@@ -647,6 +634,40 @@ const AdminDashboard = () => {
                         {proofViewer.mimeType === 'application/pdf'
                             ? <iframe title="Bukti pembayaran PDF" src={proofViewer.url} className="h-[75vh] w-full" />
                             : <img src={proofViewer.url} alt="Bukti pembayaran" className="mx-auto max-h-[75vh] max-w-full object-contain" />}
+                    </section>
+                </div>
+            )}
+            {attendeeEvent && (
+                <div className="modal-backdrop" role="presentation" onClick={() => setAttendeeEvent(null)}>
+                    <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="attendee-dialog-title"
+                        className="surface-card modal-panel p-5 md:p-6"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <span className="eyebrow">DAFTAR PEMESAN</span>
+                                <h2 id="attendee-dialog-title" className="mt-1 text-xl font-extrabold text-slate-900">{attendeeEvent.title}</h2>
+                            </div>
+                            <button type="button" className="button-secondary shrink-0" onClick={() => setAttendeeEvent(null)}>Tutup</button>
+                        </div>
+                        {attendeesLoading ? <p role="status" className="py-8 text-center text-sm text-slate-500">Memuat daftar pemesan...</p> :
+                            attendeesError ? <div role="alert" className="notice notice-error mt-5">{attendeesError}</div> :
+                                !attendees.length ? <p className="py-8 text-center text-sm text-slate-500">Belum ada yang memesan tiket event ini.</p> :
+                                    <ul className="mt-5 max-h-[60vh] divide-y divide-slate-200 overflow-y-auto">
+                                        {attendees.map((attendee) => (
+                                            <li key={attendee._id} className="flex justify-between gap-4 py-3 text-sm">
+                                                <span className="min-w-0">
+                                                    <strong className="block truncate text-slate-900">{attendee.name || attendee.email}</strong>
+                                                    {attendee.name && <span className="block truncate text-slate-500">{attendee.email}</span>}
+                                                    <span className="mt-1 block text-slate-600">{attendee.quantity} tiket · {attendeeStatusLabels[attendee.status] || attendee.status}</span>
+                                                </span>
+                                                <strong className="shrink-0 text-slate-900">{formatRupiah(Number(attendee.totalPaid))}</strong>
+                                            </li>
+                                        ))}
+                                    </ul>}
                     </section>
                 </div>
             )}
